@@ -1,66 +1,11 @@
 import { useState, useEffect } from "react";
 import { useSearchParams } from "react-router-dom";
-import { Search, Navigation, X, Bookmark, BookmarkCheck, MapPin, Footprints, Coffee, Car, BookOpen, HelpCircle, ChevronDown, ChevronUp } from "lucide-react";
+import { Search, Navigation, X, Bookmark, BookmarkCheck, MapPin, Footprints, Coffee, Car, BookOpen, HelpCircle, LocateFixed, AlertCircle } from "lucide-react";
 import { MapContainer, TileLayer, Marker, Polyline, useMap, useMapEvents } from "react-leaflet";
 import L from "leaflet";
+import { BUILDINGS, type Building, type Room } from "../data/buildings";
+import { CAMPUS_CENTER, buildRoute, formatDistance, formatEta, getWalkabilityLabel, writeStoredUserLocation } from "../lib/navigation";
 import { cn } from "../lib/utils";
-
-// Real USF Coordinates
-const USER_LOCATION: [number, number] = [28.0540, -82.4139]; // South of campus
-const CAMPUS_CENTER: [number, number] = [28.0600, -82.4130];
-
-export const BUILDINGS = [
-  { id: "lib", name: "USF Library (LIB)", type: "academic", tags: ["study"], lat: 28.05948, lng: -82.41228, desc: "Main campus library and study spaces.", rooms: [
-    { id: "lib-1", name: "Learning Commons", floor: "1st Floor", desc: "Open study area with computers" },
-    { id: "lib-2", name: "Digital Media Commons", floor: "1st Floor", desc: "Multimedia editing and equipment checkout" },
-    { id: "lib-3", name: "Special Collections", floor: "4th Floor", desc: "Rare books and archives" }
-  ] },
-  { id: "msc", name: "Marshall Student Center (MSC)", type: "service", tags: ["dining", "study"], lat: 28.06373, lng: -82.41349, desc: "Student union, dining, and event spaces.", rooms: [
-    { id: "msc-1", name: "Bulls Media", floor: "4th Floor", desc: "Student run media" },
-    { id: "msc-2", name: "Food Court", floor: "1st Floor", desc: "Various dining options" },
-    { id: "msc-3", name: "Oval Theater", floor: "2nd Floor", desc: "Large event and lecture space" }
-  ] },
-  { id: "enb", name: "Engineering Building II (ENB)", type: "academic", tags: ["study"], lat: 28.05875, lng: -82.41503, desc: "College of Engineering classrooms and labs.", rooms: [
-    { id: "enb-109", name: "ENB 109", floor: "1st Floor", desc: "Near the main north entrance" },
-    { id: "enb-118", name: "ENB 118", floor: "1st Floor", desc: "Large lecture hall" },
-    { id: "enb-205", name: "ENB 205", floor: "2nd Floor", desc: "Computer Lab" }
-  ] },
-  { id: "isa", name: "Interdisciplinary Sciences (ISA)", type: "academic", tags: ["study"], lat: 28.06145, lng: -82.41385, desc: "Advanced science labs and lecture halls.", rooms: [
-    { id: "isa-1051", name: "ISA 1051", floor: "1st Floor", desc: "Science Lecture Hall" },
-    { id: "isa-2020", name: "ISA 2020", floor: "2nd Floor", desc: "Chemistry Lab" }
-  ] },
-  { id: "svc", name: "Student Services Building (SVC)", type: "service", tags: [], lat: 28.06249, lng: -82.41255, desc: "Admissions, Financial Aid, and Registrar.", rooms: [
-    { id: "svc-1", name: "Admissions Desk", floor: "1st Floor", desc: "Undergraduate admissions" },
-    { id: "svc-2", name: "Financial Aid Office", floor: "1st Floor", desc: "Financial aid counselors" }
-  ] },
-  { id: "rec", name: "Campus Recreation Center (REC)", type: "service", tags: [], lat: 28.06048, lng: -82.40752, desc: "Fitness center, indoor track, and courts.", rooms: [
-    { id: "rec-1", name: "Weight Room", floor: "1st Floor", desc: "Free weights and machines" },
-    { id: "rec-2", name: "Cardio Deck", floor: "2nd Floor", desc: "Treadmills and ellipticals" },
-    { id: "rec-3", name: "Basketball Courts", floor: "1st Floor", desc: "Indoor courts" }
-  ] },
-  { id: "sun", name: "Yuengling Center (SUN)", type: "service", tags: [], lat: 28.05924, lng: -82.40662, desc: "Arena for sports, concerts, and events.", rooms: [
-    { id: "sun-1", name: "Main Arena", floor: "1st Floor", desc: "Basketball and volleyball court" },
-    { id: "sun-2", name: "Ticket Office", floor: "Gate A", desc: "Box office" }
-  ] },
-  { id: "cpr", name: "Cooper Hall (CPR)", type: "academic", tags: ["study"], lat: 28.05961, lng: -82.41075, desc: "College of Arts and Sciences.", rooms: [
-    { id: "cpr-103", name: "CPR 103", floor: "1st Floor", desc: "General purpose classroom" }
-  ] },
-  { id: "bsn", name: "Business Building (BSN)", type: "academic", tags: ["study"], lat: 28.05835, lng: -82.40978, desc: "Muma College of Business.", rooms: [
-    { id: "bsn-1100", name: "Atrium", floor: "1st Floor", desc: "Main gathering space" }
-  ] },
-  { id: "edu", name: "Education Building (EDU)", type: "academic", tags: ["study"], lat: 28.06076, lng: -82.41072, desc: "College of Education.", rooms: [
-    { id: "edu-162", name: "TECO Hall", floor: "1st Floor", desc: "Large presentation hall" }
-  ] },
-  { id: "fah", name: "Fine Arts Building (FAH)", type: "academic", tags: ["study"], lat: 28.06307, lng: -82.41659, desc: "College of The Arts.", rooms: [
-    { id: "fah-101", name: "Art Gallery", floor: "1st Floor", desc: "Student and faculty exhibitions" }
-  ] },
-  { id: "shs", name: "Student Health Services (SHS)", type: "service", tags: [], lat: 28.06352, lng: -82.41198, desc: "Medical clinic and pharmacy.", rooms: [
-    { id: "shs-pharm", name: "Pharmacy", floor: "1st Floor", desc: "Prescription pickup" }
-  ] },
-  { id: "rab", name: "Richard A. Beard Parking Garage (RAB)", type: "parking", tags: ["parking"], lat: 28.05854, lng: -82.41711, desc: "Multi-level parking facility for students and staff.", rooms: [] },
-  { id: "cbp", name: "Collins Blvd Parking Garage (CBP)", type: "parking", tags: ["parking"], lat: 28.06151, lng: -82.41197, desc: "Visitor and permit parking near the library.", rooms: [] },
-  { id: "chg", name: "Crescent Hill Parking Garage (CHG)", type: "parking", tags: ["parking"], lat: 28.06518, lng: -82.41210, desc: "Parking near the Marshall Student Center.", rooms: [] }
-];
 
 // Custom Leaflet Icons
 const createIcon = (isSelected: boolean) => L.divIcon({
@@ -77,12 +22,46 @@ const userIcon = L.divIcon({
   iconAnchor: [8, 8],
 });
 
+function getLocationErrorMessage(error: GeolocationPositionError) {
+  switch (error.code) {
+    case error.PERMISSION_DENIED:
+      return "Location access was denied. Enable location permission to start navigation.";
+    case error.POSITION_UNAVAILABLE:
+      return "Your location could not be determined right now.";
+    case error.TIMEOUT:
+      return "Locating you took too long. Please try again.";
+    default:
+      return "We could not access your current location.";
+  }
+}
+
+function getArrivalInstruction(building: Building, room?: Room | null) {
+  if (room) {
+    return `You will arrive at ${room.name} on the ${room.floor.toLowerCase()} of ${building.name}.`;
+  }
+
+  return `You will arrive at ${building.name}.`;
+}
+
 // Component to handle map centering
-function MapUpdater({ center, zoom }: { center: [number, number], zoom: number }) {
+function MapUpdater({
+  center,
+  zoom,
+  bounds,
+}: {
+  center: [number, number];
+  zoom: number;
+  bounds?: [[number, number], [number, number]] | null;
+}) {
   const map = useMap();
   useEffect(() => {
+    if (bounds) {
+      map.fitBounds(bounds, { padding: [70, 70] });
+      return;
+    }
+
     map.flyTo(center, zoom, { duration: 1.5 });
-  }, [center, zoom, map]);
+  }, [bounds, center, zoom, map]);
   return null;
 }
 
@@ -95,16 +74,22 @@ function MapClickHandler({ onClick }: { onClick: () => void }) {
 }
 
 export default function MapPage() {
-  const [searchParams, setSearchParams] = useSearchParams();
+  const [searchParams] = useSearchParams();
   const destId = searchParams.get("dest");
   const q = searchParams.get("q");
+  const roomId = searchParams.get("room");
+  const shouldAutoNavigate = searchParams.get("navigate") === "1";
   
   const [searchQuery, setSearchQuery] = useState(q || "");
   const [activeFilter, setActiveFilter] = useState<string | null>(null);
-  const [selectedBuilding, setSelectedBuilding] = useState<typeof BUILDINGS[0] | null>(null);
+  const [selectedBuilding, setSelectedBuilding] = useState<Building | null>(null);
   const [selectedRoom, setSelectedRoom] = useState<string | null>(null);
   const [isNavigating, setIsNavigating] = useState(false);
   const [isCardMinimized, setIsCardMinimized] = useState(false);
+  const [userLocation, setUserLocation] = useState<[number, number] | null>(null);
+  const [isLocatingUser, setIsLocatingUser] = useState(false);
+  const [locationError, setLocationError] = useState<string | null>(null);
+  const [pendingAutoNavigate, setPendingAutoNavigate] = useState(false);
   
   // Local Storage for saved locations
   const [savedLocations, setSavedLocations] = useState<string[]>(() => {
@@ -122,12 +107,48 @@ export default function MapPage() {
       const building = BUILDINGS.find(b => b.id === destId);
       if (building) {
         setSelectedBuilding(building);
-        setSearchParams({});
+        setSelectedRoom(roomId);
+        setIsCardMinimized(false);
+        setLocationError(null);
+        setPendingAutoNavigate(shouldAutoNavigate);
       }
     } else if (q) {
       setSearchQuery(q);
     }
-  }, [destId, q, setSearchParams]);
+  }, [destId, q, roomId, shouldAutoNavigate]);
+
+  useEffect(() => {
+    if (!isNavigating || typeof window === "undefined" || !("geolocation" in navigator)) {
+      return;
+    }
+
+    const watchId = navigator.geolocation.watchPosition(
+      (position) => {
+        setUserLocation([position.coords.latitude, position.coords.longitude]);
+        setLocationError(null);
+        setIsLocatingUser(false);
+      },
+      (error) => {
+        setLocationError(getLocationErrorMessage(error));
+        setIsLocatingUser(false);
+      },
+      {
+        enableHighAccuracy: true,
+        maximumAge: 5000,
+        timeout: 15000,
+      }
+    );
+
+    return () => {
+      navigator.geolocation.clearWatch(watchId);
+    };
+  }, [isNavigating]);
+
+  useEffect(() => {
+    if (userLocation) {
+      writeStoredUserLocation(userLocation);
+    }
+  }, [userLocation]);
 
   const filteredResults = BUILDINGS.filter(b => !activeFilter || b.tags.includes(activeFilter)).map(b => {
     const bMatch = b.name.toLowerCase().includes(searchQuery.toLowerCase());
@@ -149,6 +170,61 @@ export default function MapPage() {
     ? [selectedBuilding.lat, selectedBuilding.lng] as [number, number]
     : CAMPUS_CENTER;
   const mapZoom = selectedBuilding ? 17 : 16;
+  const selectedRoomData = selectedBuilding?.rooms.find((room) => room.id === selectedRoom) ?? null;
+  const destinationLocation = selectedBuilding ? [selectedBuilding.lat, selectedBuilding.lng] as [number, number] : null;
+  const routeData = userLocation && destinationLocation ? buildRoute(userLocation, destinationLocation) : null;
+  const mapBounds = isNavigating && userLocation && destinationLocation
+    ? [
+        [Math.min(userLocation[0], destinationLocation[0]), Math.min(userLocation[1], destinationLocation[1])],
+        [Math.max(userLocation[0], destinationLocation[0]), Math.max(userLocation[1], destinationLocation[1])],
+      ] as [[number, number], [number, number]]
+    : null;
+
+  const startNavigation = () => {
+    if (!selectedBuilding) {
+      return;
+    }
+
+    if (typeof window === "undefined" || !("geolocation" in navigator)) {
+      setLocationError("Geolocation is not supported in this browser.");
+      return;
+    }
+
+    setIsLocatingUser(true);
+    setLocationError(null);
+
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        setUserLocation([position.coords.latitude, position.coords.longitude]);
+        setIsNavigating(true);
+        setIsLocatingUser(false);
+      },
+      (error) => {
+        setLocationError(getLocationErrorMessage(error));
+        setIsNavigating(false);
+        setIsLocatingUser(false);
+      },
+      {
+        enableHighAccuracy: true,
+        maximumAge: 10000,
+        timeout: 15000,
+      }
+    );
+  };
+
+  const stopNavigation = () => {
+    setIsNavigating(false);
+    setIsLocatingUser(false);
+  };
+
+  useEffect(() => {
+    if (!pendingAutoNavigate || !selectedBuilding || isNavigating || isLocatingUser) {
+      return;
+    }
+
+    setPendingAutoNavigate(false);
+    startNavigation();
+  }, [pendingAutoNavigate, selectedBuilding, isNavigating, isLocatingUser]);
 
   return (
     <div className="relative w-full h-[calc(100vh-6rem)] md:h-[calc(100vh-2.5rem)] flex flex-col overflow-hidden">
@@ -262,7 +338,7 @@ export default function MapPage() {
             url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
           />
           
-          <MapUpdater center={mapCenter} zoom={mapZoom} />
+          <MapUpdater center={mapCenter} zoom={mapZoom} bounds={mapBounds} />
           
           <MapClickHandler onClick={() => {
             if (selectedBuilding) {
@@ -271,7 +347,7 @@ export default function MapPage() {
           }} />
 
           {/* User Location */}
-          <Marker position={USER_LOCATION} icon={userIcon} />
+          {userLocation && <Marker position={userLocation} icon={userIcon} />}
 
           {/* Buildings */}
           {BUILDINGS.filter(b => !activeFilter || b.tags.includes(activeFilter)).map(b => (
@@ -285,15 +361,16 @@ export default function MapPage() {
                   setSelectedRoom(null);
                   setIsNavigating(false);
                   setIsCardMinimized(false);
+                  setLocationError(null);
                 }
               }}
             />
           ))}
 
-          {/* Navigation Route (Mock) */}
-          {isNavigating && selectedBuilding && (
+          {/* Navigation Route */}
+          {isNavigating && routeData && (
             <Polyline 
-              positions={[USER_LOCATION, [selectedBuilding.lat, selectedBuilding.lng]]} 
+              positions={routeData.route}
               pathOptions={{ color: 'var(--color-primary)', weight: 5, dashArray: '10, 10' }} 
               className="animate-[dash_1s_linear_infinite]"
             />
@@ -321,7 +398,7 @@ export default function MapPage() {
                   </div>
                 </div>
                 <button 
-                  onClick={(e) => { e.stopPropagation(); setSelectedBuilding(null); setSelectedRoom(null); setIsNavigating(false); }} 
+                  onClick={(e) => { e.stopPropagation(); setSelectedBuilding(null); setSelectedRoom(null); setIsNavigating(false); setLocationError(null); }} 
                   className="p-2 rounded-full bg-surface-container hover:bg-surface-container-high text-on-surface-variant transition-colors ml-4 shrink-0"
                 >
                   <X className="w-5 h-5" />
@@ -334,7 +411,7 @@ export default function MapPage() {
               <div className="flex justify-between items-start mb-2 shrink-0">
                 <h2 className="font-headline text-xl font-bold text-on-surface pr-12">{selectedBuilding.name}</h2>
                 <button 
-                  onClick={() => { setSelectedBuilding(null); setSelectedRoom(null); setIsNavigating(false); }} 
+                  onClick={() => { setSelectedBuilding(null); setSelectedRoom(null); setIsNavigating(false); setLocationError(null); }} 
                   className="p-2 rounded-full bg-surface-container hover:bg-surface-container-high text-on-surface-variant absolute right-6 top-6 transition-colors"
                 >
                   <X className="w-5 h-5" />
@@ -362,6 +439,13 @@ export default function MapPage() {
                 )}
 
                 <p className="text-sm text-on-surface-variant mb-6">{selectedBuilding.desc}</p>
+
+                {locationError && (
+                  <div className="mb-4 rounded-2xl border border-red-500/20 bg-red-500/10 p-4 text-sm text-red-700 dark:text-red-300 flex items-start gap-3">
+                    <AlertCircle className="w-5 h-5 shrink-0 mt-0.5" />
+                    <p>{locationError}</p>
+                  </div>
+                )}
                 
                 {/* Rooms/Floors Info */}
                 {!isNavigating && selectedBuilding.rooms.length > 0 && !selectedRoom && (
@@ -387,34 +471,66 @@ export default function MapPage() {
               </div>
               
               <div className="pt-2 shrink-0">
-                {isNavigating ? (
-                  <div className="flex items-center justify-between bg-surface-container-low p-4 rounded-2xl border border-primary/20">
-                    <div className="flex items-center gap-4">
-                      <div className="w-12 h-12 bg-primary/20 rounded-full flex items-center justify-center">
-                        <Navigation className="w-6 h-6 text-primary" />
+                {isNavigating && routeData ? (
+                  <div className="space-y-4">
+                    <div className="bg-surface-container-low p-4 rounded-2xl border border-primary/20">
+                      <div className="flex items-start justify-between gap-4">
+                        <div className="flex items-center gap-4">
+                          <div className="w-12 h-12 bg-primary/20 rounded-full flex items-center justify-center">
+                            <Navigation className="w-6 h-6 text-primary" />
+                          </div>
+                          <div>
+                            <p className="text-xs font-label text-primary uppercase tracking-widest font-bold">Live Navigation</p>
+                            <div className="flex items-center gap-3 mt-1 flex-wrap">
+                              <span className="font-headline font-bold text-lg text-on-surface">{formatEta(routeData.etaMinutes)}</span>
+                              <span className="text-sm text-on-surface-variant flex items-center gap-1"><Footprints className="w-3 h-3"/> {formatDistance(routeData.totalDistance)}</span>
+                              <span className="text-xs font-bold uppercase tracking-widest text-on-surface-variant">
+                                {getWalkabilityLabel(routeData.etaMinutes)}
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+                        <button 
+                          onClick={stopNavigation}
+                          className="px-4 py-2 bg-red-500/10 text-red-700 dark:text-red-300 rounded-xl text-sm font-bold hover:bg-red-500/20 transition-colors"
+                        >
+                          End
+                        </button>
                       </div>
-                      <div>
-                        <p className="text-xs font-label text-primary uppercase tracking-widest font-bold">En Route</p>
-                        <div className="flex items-center gap-3 mt-1">
-                          <span className="font-headline font-bold text-lg text-on-surface">8 min</span>
-                          <span className="text-sm text-on-surface-variant flex items-center gap-1"><Footprints className="w-3 h-3"/> 0.4 mi</span>
+                    </div>
+
+                    <div className="bg-surface-container-lowest rounded-2xl border border-outline-variant/20 p-4">
+                      <div className="flex items-center gap-2 mb-3">
+                        <LocateFixed className="w-4 h-4 text-primary" />
+                        <h3 className="text-sm font-bold text-on-surface">Directions from your current location</h3>
+                      </div>
+                      <div className="space-y-2">
+                        {routeData.steps.map((step, index) => (
+                          <div key={step} className="flex items-start gap-3 text-sm text-on-surface">
+                            <div className="w-6 h-6 rounded-full bg-primary/10 text-primary flex items-center justify-center text-xs font-bold shrink-0">
+                              {index + 1}
+                            </div>
+                            <p>{step}</p>
+                          </div>
+                        ))}
+                        <div className="flex items-start gap-3 text-sm text-on-surface">
+                          <div className="w-6 h-6 rounded-full bg-secondary/10 text-secondary flex items-center justify-center text-xs font-bold shrink-0">
+                            {routeData.steps.length + 1}
+                          </div>
+                          <p>{getArrivalInstruction(selectedBuilding, selectedRoomData)}</p>
                         </div>
                       </div>
                     </div>
-                    <button 
-                      onClick={() => setIsNavigating(false)}
-                      className="px-4 py-2 bg-error/10 text-error rounded-xl text-sm font-bold hover:bg-error/20 transition-colors"
-                    >
-                      End
-                    </button>
                   </div>
                 ) : (
                   <div className="flex gap-2">
                     <button 
-                      onClick={() => setIsNavigating(true)} 
+                      onClick={startNavigation}
+                      disabled={isLocatingUser}
                       className="flex-1 bg-primary text-on-primary py-3.5 rounded-xl font-bold flex items-center justify-center gap-2 hover:brightness-110 transition-all shadow-lg shadow-primary/20"
                     >
-                      <Navigation className="w-5 h-5" /> Start Route
+                      {isLocatingUser ? <LocateFixed className="w-5 h-5 animate-pulse" /> : <Navigation className="w-5 h-5" />}
+                      {isLocatingUser ? "Locating You..." : "Start Route"}
                     </button>
                     <button 
                       onClick={() => toggleSave(selectedBuilding.id)} 
@@ -452,5 +568,3 @@ export default function MapPage() {
     </div>
   );
 }
-
-

@@ -1,7 +1,7 @@
 import { Bookmark, MapPin, ArrowRight, Library, Building2, Dumbbell } from "lucide-react";
 import { Link } from "react-router-dom";
-import { BUILDINGS } from "./Map";
 import { useEffect, useState } from "react";
+import { BUILDINGS } from "../data/buildings";
 
 export default function SavedPage() {
   const [savedLocations, setSavedLocations] = useState<string[]>([]);

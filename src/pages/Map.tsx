@@ -1,10 +1,14 @@
+import { useAuth, useClerk } from "@clerk/clerk-react";
 import { useState, useEffect } from "react";
-import { useSearchParams } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import { Search, Navigation, X, Bookmark, BookmarkCheck, MapPin, Footprints, Coffee, Car, BookOpen, HelpCircle, LocateFixed, AlertCircle } from "lucide-react";
 import { MapContainer, TileLayer, Marker, Polyline, useMap, useMapEvents } from "react-leaflet";
 import L from "leaflet";
 import { BUILDINGS, type Building, type Room } from "../data/buildings";
+import { fetchSavedLocations, recordRecentLocation, removeSavedLocation, saveLocation } from "../lib/api";
 import { CAMPUS_CENTER, buildRoute, formatDistance, formatEta, getWalkabilityLabel, writeStoredUserLocation } from "../lib/navigation";
+import { isLocationServicesEnabled } from "../lib/preferences";
+import { notifyRecentDestinationsUpdated } from "../lib/recent-destinations";
 import { cn } from "../lib/utils";
 
 // Custom Leaflet Icons
@@ -43,6 +47,8 @@ function getArrivalInstruction(building: Building, room?: Room | null) {
   return `You will arrive at ${building.name}.`;
 }
 
+const LOCATION_SETTINGS_DISABLED_MESSAGE = "Location Services are turned off in Settings. Turn them on there to use live navigation.";
+
 // Component to handle map centering
 function MapUpdater({
   center,
@@ -74,6 +80,8 @@ function MapClickHandler({ onClick }: { onClick: () => void }) {
 }
 
 export default function MapPage() {
+  const { getToken, isLoaded: isAuthLoaded, isSignedIn } = useAuth();
+  const { openSignIn } = useClerk();
   const [searchParams] = useSearchParams();
   const destId = searchParams.get("dest");
   const q = searchParams.get("q");
@@ -89,17 +97,82 @@ export default function MapPage() {
   const [userLocation, setUserLocation] = useState<[number, number] | null>(null);
   const [isLocatingUser, setIsLocatingUser] = useState(false);
   const [locationError, setLocationError] = useState<string | null>(null);
+  const [accountError, setAccountError] = useState<string | null>(null);
+  const [isGuideOpen, setIsGuideOpen] = useState(false);
   const [pendingAutoNavigate, setPendingAutoNavigate] = useState(false);
-  
-  // Local Storage for saved locations
-  const [savedLocations, setSavedLocations] = useState<string[]>(() => {
-    const saved = localStorage.getItem("usf_saved_locations");
-    return saved ? JSON.parse(saved) : ["lib"];
-  });
+  const [savedLocations, setSavedLocations] = useState<string[]>([]);
+  const [pendingSaveId, setPendingSaveId] = useState<string | null>(null);
+
+  async function trackRecentSelection(buildingId: string, nextRoomId: string | null, searchValue: string) {
+    if (!isSignedIn) {
+      return;
+    }
+
+    try {
+      const token = await getToken();
+      if (!token) {
+        return;
+      }
+
+      await recordRecentLocation(token, {
+        buildingId,
+        roomId: nextRoomId,
+        searchQuery: searchValue.trim() || null,
+      });
+      notifyRecentDestinationsUpdated();
+    } catch (error) {
+      console.error("Unable to record recent location", error);
+    }
+  }
+
+  function selectSearchResult(building: Building, nextRoomId: string | null, searchValue: string) {
+    setSelectedBuilding(building);
+    setSelectedRoom(nextRoomId);
+    setSearchQuery("");
+    setIsCardMinimized(false);
+    setLocationError(null);
+    setAccountError(null);
+    void trackRecentSelection(building.id, nextRoomId, searchValue);
+  }
 
   useEffect(() => {
-    localStorage.setItem("usf_saved_locations", JSON.stringify(savedLocations));
-  }, [savedLocations]);
+    if (!isAuthLoaded) {
+      return;
+    }
+
+    if (!isSignedIn) {
+      setSavedLocations([]);
+      setPendingSaveId(null);
+      setAccountError(null);
+      return;
+    }
+
+    let isCancelled = false;
+
+    async function loadSavedLocations() {
+      try {
+        const token = await getToken();
+        if (!token) {
+          throw new Error("Unable to load your saved locations.");
+        }
+
+        const saved = await fetchSavedLocations(token);
+        if (!isCancelled) {
+          setSavedLocations(saved.map((location) => location.buildingId));
+        }
+      } catch (error) {
+        if (!isCancelled) {
+          setAccountError(error instanceof Error ? error.message : "Unable to load your saved locations.");
+        }
+      }
+    }
+
+    void loadSavedLocations();
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [getToken, isAuthLoaded, isSignedIn]);
 
   // Handle URL destination parameter
   useEffect(() => {
@@ -110,7 +183,9 @@ export default function MapPage() {
         setSelectedRoom(roomId);
         setIsCardMinimized(false);
         setLocationError(null);
+        setAccountError(null);
         setPendingAutoNavigate(shouldAutoNavigate);
+        void trackRecentSelection(building.id, roomId, q ?? "");
       }
     } else if (q) {
       setSearchQuery(q);
@@ -119,6 +194,13 @@ export default function MapPage() {
 
   useEffect(() => {
     if (!isNavigating || typeof window === "undefined" || !("geolocation" in navigator)) {
+      return;
+    }
+
+    if (!isLocationServicesEnabled()) {
+      setLocationError(LOCATION_SETTINGS_DISABLED_MESSAGE);
+      setIsNavigating(false);
+      setIsLocatingUser(false);
       return;
     }
 
@@ -160,10 +242,34 @@ export default function MapPage() {
     return { building: b, matchedRooms, bMatch };
   }).filter(res => res.bMatch || res.matchedRooms.length > 0);
 
-  const toggleSave = (id: string) => {
-    setSavedLocations(prev => 
-      prev.includes(id) ? prev.filter(l => l !== id) : [...prev, id]
-    );
+  const toggleSave = async (id: string) => {
+    if (!isSignedIn) {
+      openSignIn();
+      return;
+    }
+
+    setPendingSaveId(id);
+    setAccountError(null);
+
+    try {
+      const token = await getToken();
+      if (!token) {
+        throw new Error("Unable to update your saved locations.");
+      }
+
+      const isSaved = savedLocations.includes(id);
+      if (isSaved) {
+        await removeSavedLocation(token, id);
+        setSavedLocations((current) => current.filter((entry) => entry !== id));
+      } else {
+        await saveLocation(token, id);
+        setSavedLocations((current) => (current.includes(id) ? current : [...current, id]));
+      }
+    } catch (error) {
+      setAccountError(error instanceof Error ? error.message : "Unable to update your saved locations.");
+    } finally {
+      setPendingSaveId(null);
+    }
   };
 
   const mapCenter = selectedBuilding 
@@ -182,6 +288,13 @@ export default function MapPage() {
 
   const startNavigation = () => {
     if (!selectedBuilding) {
+      return;
+    }
+
+    if (!isLocationServicesEnabled()) {
+      setLocationError(LOCATION_SETTINGS_DISABLED_MESSAGE);
+      setIsNavigating(false);
+      setIsLocatingUser(false);
       return;
     }
 
@@ -217,6 +330,10 @@ export default function MapPage() {
     setIsLocatingUser(false);
   };
 
+  const closeGuide = () => {
+    setIsGuideOpen(false);
+  };
+
   useEffect(() => {
     if (!pendingAutoNavigate || !selectedBuilding || isNavigating || isLocatingUser) {
       return;
@@ -233,7 +350,7 @@ export default function MapPage() {
       <div className="absolute top-4 left-1/2 -translate-x-1/2 z-[500] w-full max-w-2xl px-4 flex flex-col gap-3 pointer-events-none">
         
         {/* Search Input */}
-        <div className="relative shadow-[0_8px_30px_rgba(0,0,0,0.4)] rounded-full bg-surface border border-outline-variant/20 pointer-events-auto">
+        <div className="relative shadow-[0_12px_30px_rgba(26,28,27,0.18)] dark:shadow-[0_14px_34px_rgba(9,10,10,0.34)] rounded-full bg-surface border border-outline-variant/20 pointer-events-auto">
           <Search className="absolute left-5 top-1/2 -translate-y-1/2 w-5 h-5 text-on-surface-variant" />
           <input
             type="text"
@@ -272,10 +389,60 @@ export default function MapPage() {
           >
             <BookOpen className={cn("w-4 h-4", activeFilter === "study" ? "text-on-primary" : "text-green-400")} /> Study
           </button>
-          <button className="flex items-center gap-2 px-5 py-2.5 bg-primary text-on-primary shadow-lg rounded-full text-sm font-bold whitespace-nowrap hover:brightness-110 transition-colors">
+          <button onClick={() => setIsGuideOpen(true)} className="flex items-center gap-2 px-5 py-2.5 bg-primary text-on-primary shadow-lg rounded-full text-sm font-bold whitespace-nowrap hover:brightness-110 transition-colors">
             <HelpCircle className="w-4 h-4" /> Guide
           </button>
         </div>
+
+        {isGuideOpen && (
+          <div className="pointer-events-auto glass-panel rounded-3xl p-5 md:p-6 shadow-[0_18px_36px_rgba(26,28,27,0.18)] dark:shadow-[0_20px_44px_rgba(9,10,10,0.34)] animate-in fade-in slide-in-from-top-4 duration-300">
+            <div className="flex items-start justify-between gap-4 mb-4">
+              <div>
+                <span className="text-on-surface-variant font-body text-[10px] tracking-[0.22em] uppercase font-bold mb-2 block">Map Guide</span>
+                <h2 className="font-headline text-xl font-bold text-primary">How to use the campus map</h2>
+              </div>
+              <button
+                onClick={closeGuide}
+                className="rounded-full bg-surface-container p-2 text-on-surface-variant hover:bg-surface-container-high transition-colors"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              {[
+                {
+                  title: "Search quickly",
+                  body: "Type a building, room, or service name to jump straight to matching places.",
+                },
+                {
+                  title: "Use filters",
+                  body: "Tap Dining, Parking, or Study to narrow the map to the places you need right now.",
+                },
+                {
+                  title: "Open a building",
+                  body: "Select any pin to view rooms, building details, and navigation options.",
+                },
+                {
+                  title: "Start your route",
+                  body: "Use Start Route to locate yourself and get walking directions to the selected destination.",
+                },
+              ].map((item, index) => (
+                <div key={item.title} className="rounded-2xl border border-outline-variant/20 bg-surface-container-low p-4">
+                  <div className="flex items-start gap-3">
+                    <div className="w-8 h-8 rounded-full bg-primary/10 text-primary flex items-center justify-center text-sm font-bold shrink-0">
+                      {index + 1}
+                    </div>
+                    <div>
+                      <p className="font-bold text-on-surface">{item.title}</p>
+                      <p className="text-sm text-on-surface-variant mt-1.5 leading-6">{item.body}</p>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* Search Results Dropdown */}
         {searchQuery && !selectedBuilding && (
@@ -291,7 +458,9 @@ export default function MapPage() {
                   </div>
                   <div className="flex-1">
                     <button 
-                      onClick={() => { setSelectedBuilding(res.building); setSelectedRoom(null); setSearchQuery(""); setIsCardMinimized(false); }}
+                      onClick={() => {
+                        selectSearchResult(res.building, null, searchQuery);
+                      }}
                       className="text-left hover:text-primary transition-colors block w-full"
                     >
                       <p className="font-headline font-bold text-on-surface">{res.building.name}</p>
@@ -301,7 +470,9 @@ export default function MapPage() {
                         {res.matchedRooms.map(room => (
                           <button 
                             key={room.id} 
-                            onClick={() => { setSelectedBuilding(res.building); setSelectedRoom(room.id); setSearchQuery(""); setIsCardMinimized(false); }}
+                            onClick={() => {
+                              selectSearchResult(res.building, room.id, searchQuery);
+                            }}
                             className="bg-primary-container/50 p-2 rounded-lg border border-primary/10 text-left hover:bg-primary-container/80 transition-colors w-full"
                           >
                             <p className="text-sm font-bold text-primary">{room.name} <span className="text-xs font-normal text-on-surface-variant ml-1">• {room.floor}</span></p>
@@ -362,6 +533,7 @@ export default function MapPage() {
                   setIsNavigating(false);
                   setIsCardMinimized(false);
                   setLocationError(null);
+                  setAccountError(null);
                 }
               }}
             />
@@ -383,7 +555,7 @@ export default function MapPage() {
         <div className="absolute bottom-0 md:bottom-6 left-1/2 -translate-x-1/2 z-[500] w-full max-w-md md:px-4 pointer-events-none">
           {isCardMinimized ? (
             <div 
-              className="bg-surface/95 backdrop-blur-xl rounded-t-3xl md:rounded-3xl shadow-[0_-8px_30px_rgba(0,0,0,0.12)] p-5 pb-8 md:pb-5 flex flex-col cursor-pointer pointer-events-auto border-t md:border border-outline-variant/20 hover:bg-surface-container transition-all animate-in slide-in-from-bottom-8"
+              className="bg-surface/95 backdrop-blur-xl rounded-t-3xl md:rounded-3xl shadow-[0_-8px_30px_rgba(26,28,27,0.12)] dark:shadow-[0_-8px_30px_rgba(9,10,10,0.28)] p-5 pb-8 md:pb-5 flex flex-col cursor-pointer pointer-events-auto border-t md:border border-outline-variant/20 hover:bg-surface-container transition-all animate-in slide-in-from-bottom-8"
               onClick={() => setIsCardMinimized(false)}
             >
               <div className="w-12 h-1.5 bg-on-surface-variant/20 rounded-full mx-auto mb-4 shrink-0" />
@@ -398,7 +570,7 @@ export default function MapPage() {
                   </div>
                 </div>
                 <button 
-                  onClick={(e) => { e.stopPropagation(); setSelectedBuilding(null); setSelectedRoom(null); setIsNavigating(false); setLocationError(null); }} 
+                  onClick={(e) => { e.stopPropagation(); setSelectedBuilding(null); setSelectedRoom(null); setIsNavigating(false); setLocationError(null); setAccountError(null); }} 
                   className="p-2 rounded-full bg-surface-container hover:bg-surface-container-high text-on-surface-variant transition-colors ml-4 shrink-0"
                 >
                   <X className="w-5 h-5" />
@@ -406,12 +578,12 @@ export default function MapPage() {
               </div>
             </div>
           ) : (
-            <div className="bg-surface/95 backdrop-blur-xl rounded-t-3xl md:rounded-3xl shadow-[0_-8px_30px_rgba(0,0,0,0.12)] p-6 pb-8 md:pb-6 animate-in slide-in-from-bottom-8 border-t md:border border-outline-variant/20 pointer-events-auto flex flex-col max-h-[80vh]">
+            <div className="bg-surface/95 backdrop-blur-xl rounded-t-3xl md:rounded-3xl shadow-[0_-8px_30px_rgba(26,28,27,0.12)] dark:shadow-[0_-8px_30px_rgba(9,10,10,0.28)] p-6 pb-8 md:pb-6 animate-in slide-in-from-bottom-8 border-t md:border border-outline-variant/20 pointer-events-auto flex flex-col max-h-[80vh]">
               <div className="w-12 h-1.5 bg-on-surface-variant/20 rounded-full mx-auto mb-4 shrink-0 cursor-pointer" onClick={() => setIsCardMinimized(true)} />
               <div className="flex justify-between items-start mb-2 shrink-0">
                 <h2 className="font-headline text-xl font-bold text-on-surface pr-12">{selectedBuilding.name}</h2>
                 <button 
-                  onClick={() => { setSelectedBuilding(null); setSelectedRoom(null); setIsNavigating(false); setLocationError(null); }} 
+                  onClick={() => { setSelectedBuilding(null); setSelectedRoom(null); setIsNavigating(false); setLocationError(null); setAccountError(null); }} 
                   className="p-2 rounded-full bg-surface-container hover:bg-surface-container-high text-on-surface-variant absolute right-6 top-6 transition-colors"
                 >
                   <X className="w-5 h-5" />
@@ -443,7 +615,21 @@ export default function MapPage() {
                 {locationError && (
                   <div className="mb-4 rounded-2xl border border-red-500/20 bg-red-500/10 p-4 text-sm text-red-700 dark:text-red-300 flex items-start gap-3">
                     <AlertCircle className="w-5 h-5 shrink-0 mt-0.5" />
-                    <p>{locationError}</p>
+                    <div>
+                      <p>{locationError}</p>
+                      {locationError === LOCATION_SETTINGS_DISABLED_MESSAGE ? (
+                        <Link to="/settings" className="inline-flex mt-3 font-bold text-primary hover:underline">
+                          Open Settings
+                        </Link>
+                      ) : null}
+                    </div>
+                  </div>
+                )}
+
+                {accountError && (
+                  <div className="mb-4 rounded-2xl border border-amber-500/20 bg-amber-500/10 p-4 text-sm text-amber-800 dark:text-amber-200 flex items-start gap-3">
+                    <AlertCircle className="w-5 h-5 shrink-0 mt-0.5" />
+                    <p>{accountError}</p>
                   </div>
                 )}
                 
@@ -527,14 +713,15 @@ export default function MapPage() {
                     <button 
                       onClick={startNavigation}
                       disabled={isLocatingUser}
-                      className="flex-1 bg-primary text-on-primary py-3.5 rounded-xl font-bold flex items-center justify-center gap-2 hover:brightness-110 transition-all shadow-lg shadow-primary/20"
+                      className="flex-1 bg-primary text-on-primary py-3.5 rounded-xl font-bold flex items-center justify-center gap-2 hover:brightness-110 transition-all shadow-lg shadow-primary/20  mb-1.5"
                     >
                       {isLocatingUser ? <LocateFixed className="w-5 h-5 animate-pulse" /> : <Navigation className="w-5 h-5" />}
                       {isLocatingUser ? "Locating You..." : "Start Route"}
                     </button>
                     <button 
-                      onClick={() => toggleSave(selectedBuilding.id)} 
-                      className="p-3.5 rounded-xl bg-surface-container-high text-on-surface hover:bg-surface-variant transition-colors border border-outline-variant/20"
+                      onClick={() => { void toggleSave(selectedBuilding.id); }} 
+                      disabled={pendingSaveId === selectedBuilding.id}
+                      className="p-3.5 rounded-xl bg-surface-container-high text-on-surface hover:bg-surface-variant transition-colors border border-outline-variant/20 disabled:opacity-60"
                     >
                       {savedLocations.includes(selectedBuilding.id) ? (
                         <BookmarkCheck className="w-6 h-6 text-secondary" />

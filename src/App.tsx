@@ -10,6 +10,7 @@ import MapPage from "./pages/Map";
 import SavedPage from "./pages/Saved";
 import ProfilePage from "./pages/Profile";
 import SettingsPage from "./pages/Settings";
+import ShuttlePage from "./pages/Shuttle";
 
 export default function App() {
   return (
@@ -18,6 +19,7 @@ export default function App() {
         <Routes>
           <Route path="/" element={<Dashboard />} />
           <Route path="/map" element={<MapPage />} />
+          <Route path="/shuttle" element={<ShuttlePage />} />
           <Route path="/saved" element={<SavedPage />} />
           <Route path="/profile" element={<ProfilePage />} />
           <Route path="/settings" element={<SettingsPage />} />

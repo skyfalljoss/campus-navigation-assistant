@@ -1,7 +1,8 @@
 import React, { useState } from "react";
+import { SignedIn, SignedOut, SignInButton, UserButton } from "@clerk/clerk-react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { 
-  Compass, Map as MapIcon, Calendar, GraduationCap, Library, 
+  Compass, Map as MapIcon, Calendar, GraduationCap, Library, Bus,
   Settings, HelpCircle, Bell, Search, Bookmark, User, ChevronLeft, ChevronRight
 } from "lucide-react";
 import { cn } from "../lib/utils";
@@ -12,6 +13,7 @@ export function Sidebar({ isOpen, toggle }: { isOpen: boolean, toggle: () => voi
   const navItems = [
     { icon: Compass, label: "Dashboard", path: "/" },
     { icon: MapIcon, label: "Campus Map", path: "/map" },
+    { icon: Bus, label: "Shuttle", path: "/shuttle" },
     { icon: Bookmark, label: "Saved", path: "/saved" },
     { icon: User, label: "Profile", path: "/profile" },
   ];
@@ -109,13 +111,18 @@ export function TopBar({ isSidebarOpen }: { isSidebarOpen: boolean }) {
         <button className="hidden md:block text-on-surface hover:text-primary transition-colors">
           <Settings className="w-5 h-5" />
         </button>
-        <div className="w-8 h-8 rounded-full overflow-hidden border border-outline-variant ml-2">
-          <img 
-            alt="Profile" 
-            className="w-full h-full object-cover" 
-            src="https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=100&q=80" 
-          />
-        </div>
+        <SignedOut>
+          <SignInButton mode="modal">
+            <button className="ml-2 rounded-xl border border-outline-variant px-4 py-2 text-sm font-bold text-on-surface transition-colors hover:bg-surface-container">
+              Sign In
+            </button>
+          </SignInButton>
+        </SignedOut>
+        <SignedIn>
+          <div className="ml-2 rounded-full border border-outline-variant/60 p-1">
+            <UserButton afterSignOutUrl="/" />
+          </div>
+        </SignedIn>
       </div>
     </header>
   );
@@ -127,6 +134,7 @@ export function BottomNav() {
   const navItems = [
     { icon: Compass, label: "Explore", path: "/" },
     { icon: Search, label: "Search", path: "/map" },
+    { icon: Bus, label: "Shuttle", path: "/shuttle" },
     { icon: Bookmark, label: "Saved", path: "/saved" },
     { icon: User, label: "Profile", path: "/profile" },
   ];
@@ -160,6 +168,19 @@ export function Layout({ children }: { children: React.ReactNode }) {
 
   return (
     <div className="relative min-h-screen w-full bg-surface text-on-surface">
+      <div className="fixed inset-0 z-0 pointer-events-none overflow-hidden">
+        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[120%] h-[120%] opacity-[0.15] dark:opacity-10 bg-[radial-gradient(circle_at_center,_var(--color-primary),_transparent,_transparent)]"></div>
+        <div className="absolute -right-20 top-20 w-[600px] h-[600px] opacity-30 dark:opacity-20 hidden xl:block">
+          <div className="relative w-full h-full rounded-full overflow-hidden border border-primary/20 animate-[spin_60s_linear_infinite]">
+            <div className="absolute inset-0 bg-primary/40 mix-blend-color z-10"></div>
+            <img
+              alt="Globe"
+              className="w-full h-full object-cover scale-110 grayscale brightness-50 contrast-125"
+              src="https://images.unsplash.com/photo-1524661135-423995f22d0b?auto=format&fit=crop&w=800&q=80"
+            />
+          </div>
+        </div>
+      </div>
       <TopBar isSidebarOpen={isSidebarOpen} />
       <Sidebar isOpen={isSidebarOpen} toggle={() => setIsSidebarOpen(!isSidebarOpen)} />
       <main className={cn(

@@ -1,13 +1,84 @@
-import { Moon, Sun, Monitor, Bell, Shield, Smartphone } from "lucide-react";
-import { useState, useEffect } from "react";
+import { useClerk } from "@clerk/clerk-react";
+import { Bell, Monitor, Moon, Shield, Smartphone, Sun } from "lucide-react";
+import { useEffect, useState } from "react";
+import {
+  EMAIL_UPDATES_STORAGE_KEY,
+  LOCATION_SERVICES_STORAGE_KEY,
+  PUSH_UPDATES_STORAGE_KEY,
+  THEME_STORAGE_KEY,
+} from "../lib/preferences";
+
+function Toggle({
+  checked,
+  onToggle,
+  disabled = false,
+}: {
+  checked: boolean;
+  onToggle: () => void;
+  disabled?: boolean;
+}) {
+  return (
+    <button
+      type="button"
+      role="switch"
+      aria-checked={checked}
+      onClick={onToggle}
+      disabled={disabled}
+      className={`relative h-6 w-12 rounded-full transition-colors ${checked ? "bg-primary" : "bg-surface-container-highest"} ${disabled ? "cursor-not-allowed opacity-60" : "cursor-pointer"}`}
+    >
+      <span
+        className={`absolute top-1 h-4 w-4 rounded-full transition-all ${checked ? "right-1 bg-on-primary" : "left-1 bg-on-surface-variant"}`}
+      />
+    </button>
+  );
+}
 
 export default function SettingsPage() {
+  const { openUserProfile } = useClerk();
   const [theme, setTheme] = useState<"dark" | "light" | "system">(() => {
-    if (typeof window !== 'undefined') {
-      return document.documentElement.classList.contains('dark') ? 'dark' : 'light';
+    if (typeof window !== "undefined") {
+      const storedTheme = window.localStorage.getItem(THEME_STORAGE_KEY);
+      if (storedTheme === "dark" || storedTheme === "light" || storedTheme === "system") {
+        return storedTheme;
+      }
+
+      return document.documentElement.classList.contains("dark") ? "dark" : "light";
     }
-    return 'light';
+    return "light";
   });
+  const [pushPermission, setPushPermission] = useState<NotificationPermission | "unsupported">(() => {
+    if (typeof window === "undefined" || !("Notification" in window)) {
+      return "unsupported";
+    }
+
+    return Notification.permission;
+  });
+  const [isUpdatingPush, setIsUpdatingPush] = useState(false);
+  const [pushMessage, setPushMessage] = useState<string | null>(null);
+  const [pushUpdatesEnabled, setPushUpdatesEnabled] = useState(() => {
+    if (typeof window === "undefined") {
+      return false;
+    }
+
+    return window.localStorage.getItem(PUSH_UPDATES_STORAGE_KEY) === "true";
+  });
+  const [emailUpdatesEnabled, setEmailUpdatesEnabled] = useState(() => {
+    if (typeof window === "undefined") {
+      return false;
+    }
+
+    return window.localStorage.getItem(EMAIL_UPDATES_STORAGE_KEY) !== "false";
+  });
+  const [locationServicesEnabled, setLocationServicesEnabled] = useState(() => {
+    if (typeof window === "undefined") {
+      return true;
+    }
+
+    return window.localStorage.getItem(LOCATION_SERVICES_STORAGE_KEY) !== "false";
+  });
+  const [locationPermission, setLocationPermission] = useState<PermissionState | "unsupported">("unsupported");
+  const [isUpdatingLocation, setIsUpdatingLocation] = useState(false);
+  const [locationMessage, setLocationMessage] = useState<string | null>(null);
 
   useEffect(() => {
     const root = window.document.documentElement;
@@ -23,7 +94,165 @@ export default function SettingsPage() {
         root.classList.remove("dark");
       }
     }
+
+    window.localStorage.setItem(THEME_STORAGE_KEY, theme);
   }, [theme]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    window.localStorage.setItem(EMAIL_UPDATES_STORAGE_KEY, String(emailUpdatesEnabled));
+  }, [emailUpdatesEnabled]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    window.localStorage.setItem(PUSH_UPDATES_STORAGE_KEY, String(pushUpdatesEnabled));
+  }, [pushUpdatesEnabled]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    window.localStorage.setItem(LOCATION_SERVICES_STORAGE_KEY, String(locationServicesEnabled));
+  }, [locationServicesEnabled]);
+
+  useEffect(() => {
+    if (typeof window === "undefined" || !("geolocation" in navigator)) {
+      setLocationPermission("unsupported");
+      return;
+    }
+
+    if (!("permissions" in navigator)) {
+      setLocationPermission("prompt");
+      return;
+    }
+
+    let isCancelled = false;
+
+    void navigator.permissions
+      .query({ name: "geolocation" })
+      .then((status) => {
+        if (isCancelled) {
+          return;
+        }
+
+        setLocationPermission(status.state);
+        status.onchange = () => {
+          setLocationPermission(status.state);
+        };
+      })
+      .catch(() => {
+        if (!isCancelled) {
+          setLocationPermission("prompt");
+        }
+      });
+
+    return () => {
+      isCancelled = true;
+    };
+  }, []);
+
+  const pushNotificationsEnabled = pushPermission === "granted" && pushUpdatesEnabled;
+  const locationServicesActive = locationPermission === "granted" && locationServicesEnabled;
+
+  const handlePushToggle = async () => {
+    if (pushPermission === "unsupported") {
+      setPushMessage("This browser does not support push notifications.");
+      return;
+    }
+
+    if (pushUpdatesEnabled && pushPermission === "granted") {
+      setPushUpdatesEnabled(false);
+      setPushMessage("Push notifications turned off in the app. Browser permission stays granted, but the app will treat notifications as disabled.");
+      return;
+    }
+
+    if (pushPermission === "granted") {
+      setPushUpdatesEnabled(true);
+      setPushMessage("Push notifications are enabled for this browser and for the app.");
+      return;
+    }
+
+    setIsUpdatingPush(true);
+    setPushMessage(null);
+
+    try {
+      const permission = await Notification.requestPermission();
+      setPushPermission(permission);
+
+      if (permission === "granted") {
+        setPushUpdatesEnabled(true);
+        setPushMessage("Push notifications enabled. You can now receive campus alerts on this device.");
+
+        new Notification("USF Assistant notifications enabled", {
+          body: "You will now receive transit and campus alert notifications on this device.",
+        });
+      } else if (permission === "denied") {
+        setPushUpdatesEnabled(false);
+        setPushMessage("Push notifications are blocked in your browser. If no permission popup appeared, allow notifications in browser site settings and try again.");
+      }
+    } finally {
+      setIsUpdatingPush(false);
+    }
+  };
+
+  const handleEmailToggle = () => {
+    setEmailUpdatesEnabled((current) => !current);
+  };
+
+  const handleLocationToggle = async () => {
+    if (!locationServicesEnabled) {
+      if (locationPermission === "unsupported") {
+        setLocationMessage("This browser does not support location services.");
+        return;
+      }
+
+      if (locationPermission === "granted") {
+        setLocationServicesEnabled(true);
+        setLocationMessage("Location services enabled for the app.");
+        return;
+      }
+
+      setIsUpdatingLocation(true);
+      setLocationMessage(null);
+
+      navigator.geolocation.getCurrentPosition(
+        () => {
+          setLocationPermission("granted");
+          setLocationServicesEnabled(true);
+          setLocationMessage("Location services enabled. The app can now use your current location for routing.");
+          setIsUpdatingLocation(false);
+        },
+        (error) => {
+          if (error.code === error.PERMISSION_DENIED) {
+            setLocationPermission("denied");
+            setLocationServicesEnabled(false);
+            setLocationMessage("Location permission is blocked in your browser. If no permission popup appeared, enable location access in browser site settings and try again.");
+          } else {
+            setLocationMessage("We could not access your location right now. Try again in a moment.");
+          }
+
+          setIsUpdatingLocation(false);
+        },
+        {
+          enableHighAccuracy: true,
+          timeout: 10000,
+          maximumAge: 0,
+        }
+      );
+
+      return;
+    }
+
+    setLocationServicesEnabled(false);
+    setLocationMessage("Location services turned off in the app. Turn them back on whenever you want to use live navigation.");
+  };
 
   return (
     <div className="max-w-4xl mx-auto w-full px-6 md:px-12 animate-in fade-in slide-in-from-bottom-4 duration-500">
@@ -43,7 +272,7 @@ export default function SettingsPage() {
               <div>
                 <h3 className="font-bold text-on-surface">Theme Mode</h3>
                 <p className="text-sm text-on-surface-variant mt-1">
-                  Choose how the app looks. Light mode is coming soon!
+                  Choose how the app looks across every page.
                 </p>
               </div>
               <div className="flex bg-surface-container-high rounded-xl p-1 shrink-0">
@@ -91,22 +320,35 @@ export default function SettingsPage() {
             <div className="flex items-center justify-between">
               <div>
                 <h3 className="font-bold text-on-surface">Push Notifications</h3>
-                <p className="text-sm text-on-surface-variant mt-1">Receive alerts for transit and campus events.</p>
+                <p className="text-sm text-on-surface-variant mt-1">
+                  Receive alerts for transit and campus events.
+                  {pushPermission === "unsupported"
+                    ? " This browser does not support notifications."
+                    : pushPermission === "granted"
+                      ? pushUpdatesEnabled
+                        ? " Notifications are enabled on this device and in the app."
+                        : " Browser permission is granted, but notifications are turned off in the app."
+                      : pushPermission === "denied"
+                        ? " Notifications are blocked in browser settings."
+                        : " Enable them for this browser when prompted."}
+                </p>
               </div>
-              <div className="w-12 h-6 bg-primary rounded-full relative cursor-pointer">
-                <div className="absolute right-1 top-1 w-4 h-4 bg-on-primary rounded-full"></div>
-              </div>
+              <Toggle checked={pushNotificationsEnabled} onToggle={() => void handlePushToggle()} disabled={isUpdatingPush || pushPermission === "unsupported"} />
             </div>
+            {pushMessage ? <p className="text-sm text-on-surface-variant -mt-2">{pushMessage}</p> : null}
             <div className="h-[1px] w-full bg-outline-variant/20"></div>
             <div className="flex items-center justify-between">
               <div>
                 <h3 className="font-bold text-on-surface">Email Updates</h3>
-                <p className="text-sm text-on-surface-variant mt-1">Weekly newsletter and important announcements.</p>
+                <p className="text-sm text-on-surface-variant mt-1">
+                  Weekly newsletter and important announcements. This preference is saved on this device.
+                </p>
               </div>
-              <div className="w-12 h-6 bg-surface-container-highest rounded-full relative cursor-pointer">
-                <div className="absolute left-1 top-1 w-4 h-4 bg-on-surface-variant rounded-full"></div>
-              </div>
+              <Toggle checked={emailUpdatesEnabled} onToggle={handleEmailToggle} />
             </div>
+            <p className="text-sm text-on-surface-variant -mt-2">
+              Email updates are currently <span className="font-semibold text-on-surface">{emailUpdatesEnabled ? "enabled" : "disabled"}</span>.
+            </p>
           </div>
         </section>
 
@@ -119,14 +361,27 @@ export default function SettingsPage() {
             <div className="flex items-center justify-between">
               <div>
                 <h3 className="font-bold text-on-surface">Location Services</h3>
-                <p className="text-sm text-on-surface-variant mt-1">Allow app to use your location for navigation.</p>
+                <p className="text-sm text-on-surface-variant mt-1">
+                  Allow the app to use your location for navigation.
+                  {locationPermission === "unsupported"
+                    ? " This browser does not support geolocation."
+                    : locationPermission === "granted"
+                      ? locationServicesEnabled
+                        ? " Location services are enabled on this device and in the app."
+                        : " Browser permission is granted, but location services are turned off in the app."
+                      : locationPermission === "denied"
+                        ? " Location access is blocked in browser settings."
+                        : " Enable it for this browser when prompted."}
+                </p>
               </div>
-              <div className="w-12 h-6 bg-primary rounded-full relative cursor-pointer">
-                <div className="absolute right-1 top-1 w-4 h-4 bg-on-primary rounded-full"></div>
-              </div>
+              <Toggle checked={locationServicesActive} onToggle={() => void handleLocationToggle()} disabled={isUpdatingLocation || locationPermission === "unsupported"} />
             </div>
+            <p className="text-sm text-on-surface-variant -mt-2">
+              Location services are currently <span className="font-semibold text-on-surface">{locationServicesActive ? "enabled" : "disabled"}</span> for the app.
+            </p>
+            {locationMessage ? <p className="text-sm text-on-surface-variant -mt-2">{locationMessage}</p> : null}
             <div className="h-[1px] w-full bg-outline-variant/20"></div>
-            <button className="text-primary font-bold text-sm hover:underline">
+            <button onClick={() => openUserProfile()} className="text-primary font-bold text-sm hover:underline">
               Manage Account Data
             </button>
           </div>

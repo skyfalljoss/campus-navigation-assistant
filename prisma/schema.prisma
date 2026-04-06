@@ -1,0 +1,49 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+model SavedLocation {
+  id         String   @id @default(cuid())
+  userId     String
+  buildingId String
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime
+
+  @@unique([userId, buildingId])
+  @@index([userId, updatedAt])
+}
+
+model RecentSearch {
+  id          String   @id
+  userId      String
+  query       String
+  fingerprint String
+  buildingId  String?
+  roomId      String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime
+
+  @@unique([userId, fingerprint])
+  @@index([userId, updatedAt])
+}
+
+model ScheduleEntry {
+  id        String   @id @default(cuid())
+  userId    String
+  course    String
+  room      String
+  buildingId String
+  dayOfWeek String
+  slotKey   String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([userId, dayOfWeek, slotKey])
+  @@index([userId, updatedAt])
+}

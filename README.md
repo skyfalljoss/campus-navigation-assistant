@@ -1,91 +1,328 @@
 # Campus Navigation Assistant
 
-Campus Navigation Assistant is a responsive React app for helping students and visitors explore a university campus, search for buildings and rooms, and preview simple walking routes. The current experience is tailored around the USF campus and focuses on a polished map-first interface for discovery and navigation.
+> Campus map, shuttle tracking, saved places, and schedule tools in one web app.
 
-## Overview
+![Status](https://img.shields.io/badge/status-local%20dev-blue)
+![Frontend](https://img.shields.io/badge/frontend-React%2019-61dafb)
+![Backend](https://img.shields.io/badge/backend-Express-111111)
+![Database](https://img.shields.io/badge/database-PostgreSQL-336791)
 
-This project includes:
+Campus Navigation Assistant is a campus map and navigation web app built with React, Express, Prisma, and PostgreSQL. It helps users explore buildings, view shuttle data, save locations, and use authenticated features through Clerk.
 
-- A dashboard with quick destination shortcuts and campus activity cards
-- An interactive Leaflet map with searchable buildings and room listings
-- Quick filters for study spaces, dining, and parking
-- Bookmarking for saved locations using `localStorage`
-- Profile and settings screens to round out the product experience
+## Key Features
 
-## Tech Stack
+- Search campus buildings and rooms
+- Explore an interactive campus map
+- View shuttle routes and vehicle activity
+- Save favorite destinations
+- Manage authenticated user features with Clerk
+- Store app data with Prisma and PostgreSQL
+
+## What This Project Uses
 
 - React 19
 - TypeScript
 - Vite
-- React Router
-- Leaflet with React Leaflet
+- Express
+- Prisma
+- PostgreSQL
+- Clerk
+- Leaflet
 - Tailwind CSS v4
-- Lucide React icons
+
+## Before You Start
+
+You need:
+
+- Node.js 20 or newer
+- npm
+- A PostgreSQL database
+- Clerk API keys
+
+## Important Note About Apple Devices
+
+- Full development is supported on Windows and macOS.
+- iPhone and iPad cannot run the project locally by themselves.
+- You can still test the app on iPhone or iPad by running it on your computer and opening it from Safari on the same Wi-Fi network.
+
+## Quick Setup Overview
+
+```mermaid
+flowchart TD
+    A[Clone project] --> B[Install dependencies]
+    B --> C[Create .env from .env.example]
+    C --> D[Add Clerk and database keys]
+    D --> E[Generate Prisma client]
+    E --> F[Run Prisma migrations]
+    F --> G[Start dev server]
+    G --> H[Open localhost:3000]
+```
+
+## Environment Variables
+
+Copy `.env.example` to `.env` and fill in your real values.
+
+Required:
+
+- `VITE_CLERK_PUBLISHABLE_KEY`
+- `CLERK_PUBLISHABLE_KEY`
+- `CLERK_SECRET_KEY`
+- `DATABASE_URL`
+- `DIRECT_URL`
+
+Usually keep these local values:
+
+- `PORT="4000"`
+- `CORS_ORIGIN="http://localhost:3000"`
+- `VITE_API_BASE_URL=""`
+
+Optional:
+
+- `PASSIO_SYSTEM_ID`
+
+## Windows Setup
+
+Use PowerShell.
+
+### 1. Install packages
+
+```powershell
+npm install
+```
+
+### 2. Create the env file
+
+```powershell
+Copy-Item .env.example .env
+```
+
+Open `.env` and paste in your Clerk keys and PostgreSQL URLs.
+
+### 3. Generate Prisma client
+
+```powershell
+npm run prisma:generate
+```
+
+### 4. Run database migrations
+
+```powershell
+npm run prisma:migrate:dev
+```
+
+### 5. Start the app
+
+```powershell
+npm run dev
+```
+
+Open:
+
+- Frontend: `http://localhost:3000`
+- API: `http://localhost:4000`
+
+## Apple Setup
+
+### macOS Setup
+
+Use Terminal.
+
+#### 1. Install packages
+
+```bash
+npm install
+```
+
+#### 2. Create the env file
+
+```bash
+cp .env.example .env
+```
+
+Open `.env` and paste in your Clerk keys and PostgreSQL URLs.
+
+#### 3. Generate Prisma client
+
+```bash
+npm run prisma:generate
+```
+
+#### 4. Run database migrations
+
+```bash
+npm run prisma:migrate:dev
+```
+
+#### 5. Start the app
+
+```bash
+npm run dev
+```
+
+Open:
+
+- Frontend: `http://localhost:3000`
+- API: `http://localhost:4000`
+
+### iPhone and iPad Testing
+
+Use this only for testing in the browser.
+
+1. Run `npm run dev` on your Windows PC or Mac.
+2. Make sure your computer and iPhone/iPad are on the same Wi-Fi.
+3. Find your computer's local IP address.
+4. Open `http://YOUR_LOCAL_IP:3000` in Safari.
+5. If API requests are blocked, update `CORS_ORIGIN` in `.env`.
+
+The frontend dev server already uses `--host=0.0.0.0`, so it can be opened from other devices on your network.
+
+## How The App Runs
+
+```mermaid
+flowchart LR
+    A[Browser / React app] -->|/api requests| B[Express API]
+    B --> C[Prisma]
+    C --> D[PostgreSQL]
+    A --> E[Clerk]
+    B --> E
+```
+
+## Commands
+
+- `npm run dev` starts frontend and API together
+- `npm run dev:client` starts only the frontend
+- `npm run dev:server` starts only the API
+- `npm run build` builds the frontend
+- `npm run start` runs production migrations and starts the production server
+- `npm run start:server` starts only the production server process
+- `npm run preview` previews the built frontend
+- `npm run lint` runs TypeScript checks
+- `npm run prisma:generate` regenerates Prisma client
+- `npm run prisma:migrate:dev` runs database migrations
+- `npm run prisma:migrate:deploy` runs production-safe migrations
+- `npm run test:passio` runs the Passio test script
 
 ## Project Structure
 
 ```text
 src/
-  components/
-    Layout.tsx        Shared sidebar, top bar, and mobile navigation
-  pages/
-    Dashboard.tsx     Landing page and quick campus shortcuts
-    Map.tsx           Interactive map, search, filtering, and saved locations
-    Saved.tsx         Bookmarked destinations
-    Profile.tsx       Example user profile screen
-    Settings.tsx      Theme and preference UI
-  App.tsx             Route definitions
-  main.tsx            App entry point
-  index.css           Theme tokens and global styles
+  components/   Shared UI
+  data/         Campus data
+  lib/          Helpers and API utilities
+  pages/        App screens
+server/         Express backend
+prisma/         Prisma schema and migrations
 ```
 
-## Getting Started
+## Deployment
 
-### Prerequisites
+Recommended free setup:
 
-- Node.js 18+ recommended
-- npm
+- Render for the app server
+- Neon for PostgreSQL
+- Clerk for auth
 
-### Install and Run
+This repo now includes `render.yaml` so Render can run the frontend and API together as one Node service.
 
-```bash
-npm install
-npm run dev
-```
+### 1. Create a Neon database
 
-The development server runs at `http://localhost:3000`.
+Create a free Neon Postgres project and copy:
 
-## Available Scripts
+- `DATABASE_URL`
+- `DIRECT_URL`
 
-- `npm run dev` starts the Vite dev server on port `3000`
-- `npm run build` creates a production build in `dist/`
-- `npm run preview` previews the production build locally
-- `npm run lint` runs TypeScript type-checking with `tsc --noEmit`
-- `npm run clean` removes the `dist/` folder
+### 2. Create a Render web service
 
-## Current Behavior
+1. Push this repo to GitHub.
+2. In Render, create a new `Blueprint` or `Web Service` from the repo.
+3. Render will detect `render.yaml`.
+4. Use the default service settings from the file.
 
-- Campus data is currently mocked in [`src/pages/Map.tsx`](./src/pages/Map.tsx)
-- Saved destinations are stored in the browser with `localStorage`
-- Route drawing is a UI mock between a fixed user location and the selected building
-- The app is front-end focused right now and does not include a live backend or real-time campus data feed
+### 3. Add Render environment variables
 
-## Environment Variables
+Set these in Render:
 
-An [`.env.example`](./.env.example) file is included from the original scaffold, but the current front-end app does not require environment variables to run locally.
+- `DATABASE_URL`
+- `DIRECT_URL`
+- `CLERK_SECRET_KEY`
+- `CLERK_PUBLISHABLE_KEY`
+- `VITE_CLERK_PUBLISHABLE_KEY`
+- `CORS_ORIGIN`
+- `PASSIO_SYSTEM_ID=2343`
 
-If you later add AI features or a backend service, you can use that file as a starting point for configuration.
+For a single Render service, set:
+
+- `CORS_ORIGIN=https://your-render-app.onrender.com`
+
+Do not set `VITE_API_BASE_URL` for this setup. The frontend and API run from the same origin in production.
+
+### 4. Update Clerk settings
+
+In Clerk, add your Render domain to the allowed URLs for:
+
+- frontend app domain
+- sign-in / sign-up redirect URLs
+- allowed origins if required by your Clerk setup
+
+### 5. Deploy
+
+Render will:
+
+- install dependencies
+- generate the Prisma client
+- build the Vite frontend
+- run Prisma deploy migrations on startup
+- start the Express server
+
+The Express server serves both:
+
+- frontend pages
+- `/api/*` endpoints
+
+### 6. Open the deployed app
+
+After deploy finishes, open your Render URL and test:
+
+- landing page
+- shuttle page
+- sign-in flow
+- saved locations
+- schedule features
+
+## Screenshots
+
+| Screen | Preview |
+| --- | --- |
+| Dashboard | <img src="docs/screenshots/dashboard.png" alt="Dashboard screen" width="420" /><br />Main overview screen with shortcuts, schedule, and campus activity highlights. |
+| Map | <img src="docs/screenshots/map.png" alt="Map screen" width="420" /><br />Interactive campus map with building search and navigation support. |
+| Shuttle | <img src="docs/screenshots/shuttle.png" alt="Shuttle screen" width="420" /><br />Live shuttle view showing routes, vehicles, and transit status. |
+| Saved | <img src="docs/screenshots/saved.png" alt="Saved locations screen" width="420" /><br />Saved destinations for quick access to frequently used places. |
+| Profile | <img src="docs/screenshots/profile.png" alt="Profile screen" width="420" /><br />Account and signed-in user experience powered by Clerk. |
+
+## Troubleshooting
+
+### Missing Clerk key
+
+If the app fails with `Missing VITE_CLERK_PUBLISHABLE_KEY.`, your `.env` file is missing the frontend Clerk key.
+
+### API server not working
+
+If the frontend cannot load data, make sure the API is running on port `4000`. The easiest fix is to run `npm run dev`.
+
+### Prisma errors
+
+Check that:
+
+- `DATABASE_URL` is correct
+- `DIRECT_URL` is correct
+- your PostgreSQL database is reachable
 
 ## Notes
 
-- The map uses OpenStreetMap tiles through Leaflet
-- The UI supports light and dark theme toggling in the settings page
-- Several screens currently act as product/demo views rather than fully connected account features
+- During local development, the frontend proxies `/api` to `http://localhost:4000`.
+- `VITE_API_BASE_URL` is only needed if the frontend and API are hosted on different domains.
+- Signed-in features require Clerk to be configured correctly.
 
-## Future Improvements
+## Contributors
 
-- Connect search and routing to real campus GIS or navigation data
-- Replace mocked shuttle and activity cards with live feeds
-- Add authentication and persistent user profiles
-- Support turn-by-turn directions and accessibility-aware routes
-- Move static campus data into a dedicated data layer or API
+- Phong

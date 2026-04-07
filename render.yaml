@@ -1,0 +1,14 @@
+services:
+  - type: web
+    name: campus-navigation-assistant
+    runtime: node
+    plan: free
+    autoDeploy: true
+    buildCommand: npm install && npm run prisma:generate && npm run build
+    startCommand: npm run start
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_VERSION
+        value: 20
+      - key: NODE_ENV
+        value: production

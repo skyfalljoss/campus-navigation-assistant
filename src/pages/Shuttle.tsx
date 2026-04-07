@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { AlertTriangle, Bus, Clock3, MapPinned, Navigation, RefreshCw, Route as RouteIcon } from "lucide-react";
 import { Link } from "react-router-dom";
-import { MapContainer, Marker, Popup, TileLayer, useMap } from "react-leaflet";
+import { CircleMarker, MapContainer, Marker, Polyline, Popup, TileLayer, useMap } from "react-leaflet";
 import L from "leaflet";
 
 import { fetchShuttleOverview, type ShuttleOverviewRecord, type ShuttleRouteRecord, type ShuttleVehicleRecord } from "../lib/api";
@@ -40,6 +40,14 @@ function splitOperatingHoursMessage(message: string) {
     .filter(Boolean);
 }
 
+function getOperatingHoursDayLabel(line: string) {
+  return /Monday - Thursday|Friday|Saturday - Sunday/i.exec(line)?.[0] ?? null;
+}
+
+function getOperatingHoursTimeRange(line: string, dayLabel: string) {
+  return line.replace(dayLabel, "").replace(/^\s*:?\s*/, "").trim();
+}
+
 function createVehicleIcon(color: string | null) {
   const markerColor = color ?? "#006747";
 
@@ -52,30 +60,49 @@ function createVehicleIcon(color: string | null) {
   });
 }
 
-function ShuttleMapViewport({ vehicles }: { vehicles: ShuttleVehicleRecord[] }) {
+function ShuttleMapViewport({
+  vehicles,
+  routes,
+}: {
+  vehicles: ShuttleVehicleRecord[];
+  routes: ShuttleRouteRecord[];
+}) {
   const map = useMap();
 
   useEffect(() => {
-    if (vehicles.length === 0) {
+    const routePoints = routes.flatMap((route) => (route.path ?? []).flatMap((segment) => segment));
+
+    if (vehicles.length === 0 && routePoints.length === 0) {
       map.flyTo(CAMPUS_CENTER, 15, { duration: 1.2 });
       return;
     }
 
-    if (vehicles.length === 1) {
+    if (vehicles.length === 1 && routePoints.length === 0) {
       const [vehicle] = vehicles;
       map.flyTo([vehicle.latitude, vehicle.longitude], 16, { duration: 1.2 });
       return;
     }
 
-    const bounds = L.latLngBounds(vehicles.map((vehicle) => [vehicle.latitude, vehicle.longitude] as [number, number]));
+    const bounds = L.latLngBounds([
+      ...routePoints,
+      ...vehicles.map((vehicle) => [vehicle.latitude, vehicle.longitude] as [number, number]),
+    ]);
     map.fitBounds(bounds, { padding: [48, 48], maxZoom: 16 });
-  }, [map, vehicles]);
+  }, [map, routes, vehicles]);
 
   return null;
 }
 
 function getPrimaryRouteColor(route: ShuttleRouteRecord | undefined) {
   return route?.color ?? "var(--color-primary)";
+}
+
+function getRoutePath(route: ShuttleRouteRecord) {
+  return route.path ?? [];
+}
+
+function getRouteStops(route: ShuttleRouteRecord) {
+  return route.stops ?? [];
 }
 
 export default function ShuttlePage() {
@@ -132,8 +159,18 @@ export default function ShuttlePage() {
 
     return overview.vehicles.filter((vehicle) => vehicle.routeId === selectedRouteId);
   }, [overview, selectedRouteId]);
+  const filteredRoutes = useMemo(() => {
+    if (!selectedRouteId) {
+      return routes;
+    }
+
+    return routes.filter((route) => route.id === selectedRouteId);
+  }, [routes, selectedRouteId]);
 
   const selectedRoute = routes.find((route) => route.id === selectedRouteId);
+  const selectedRouteStops = useMemo(() => {
+    return selectedRoute ? getRouteStops(selectedRoute) : [];
+  }, [selectedRoute]);
   const selectedRouteColor = getPrimaryRouteColor(selectedRoute);
   const routeLookup = useMemo(() => new Map(routes.map((route) => [route.id, route])), [routes]);
   const sortedRoutes = useMemo(() => {
@@ -158,6 +195,23 @@ export default function ShuttlePage() {
   const operatingHoursLines = useMemo(() => {
     return operatingHoursAlert ? splitOperatingHoursMessage(operatingHoursAlert.message) : [];
   }, [operatingHoursAlert]);
+  const operatingHourRows = useMemo(() => {
+    return operatingHoursLines.flatMap((line) => {
+      const dayLabel = getOperatingHoursDayLabel(line);
+      if (!dayLabel) {
+        return [];
+      }
+
+      return [{
+        key: dayLabel,
+        dayLabel,
+        timeRange: getOperatingHoursTimeRange(line, dayLabel),
+      }];
+    });
+  }, [operatingHoursLines]);
+  const operatingHourNotes = useMemo(() => {
+    return operatingHoursLines.filter((line) => !getOperatingHoursDayLabel(line));
+  }, [operatingHoursLines]);
 
   return (
     <div className="max-w-7xl mx-auto w-full px-6 md:px-12 pb-12">
@@ -295,7 +349,7 @@ export default function ShuttlePage() {
           </section>
 
           <section className="grid grid-cols-1 xl:grid-cols-12 gap-6 mb-8">
-            <div className="xl:col-span-8 glass-panel rounded-3xl overflow-hidden border" style={{ borderColor: selectedRoute ? `${selectedRouteColor}40` : undefined }}>
+            <div className="xl:col-span-8 glass-panel rounded-3xl overflow-hidden border flex flex-col" style={{ borderColor: selectedRoute ? `${selectedRouteColor}40` : undefined }}>
               <div className="px-6 py-5 border-b border-outline-variant/20 flex items-center justify-between gap-4 flex-wrap">
                 <div>
                   <span className="text-on-surface-variant font-body text-[10px] tracking-[0.22em] uppercase font-bold mb-2 block">Map</span>
@@ -313,13 +367,61 @@ export default function ShuttlePage() {
                 </div>
               </div>
 
-              <div className="relative h-[420px]">
-                <MapContainer center={CAMPUS_CENTER} zoom={15} className="h-full w-full" zoomControl={false}>
+              <div className="relative h-[420px] overflow-hidden bg-surface-container-lowest">
+                <MapContainer center={CAMPUS_CENTER} zoom={15} className="absolute inset-0 h-full w-full" zoomControl={false}>
                   <TileLayer
                     attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
                     url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
                   />
-                  <ShuttleMapViewport vehicles={filteredVehicles} />
+                  <ShuttleMapViewport vehicles={filteredVehicles} routes={filteredRoutes} />
+                  {filteredRoutes.map((route) => (
+                    getRoutePath(route).flatMap((segment, segmentIndex) => (
+                      [
+                        <Polyline
+                          key={`${route.id}-${segmentIndex}-casing`}
+                          positions={segment}
+                          pathOptions={{
+                            color: "#ffffff",
+                            weight: selectedRouteId === route.id ? 11 : 9,
+                            opacity: 0.92,
+                            lineCap: "round",
+                            lineJoin: "round",
+                          }}
+                        />,
+                        <Polyline
+                          key={`${route.id}-${segmentIndex}-line`}
+                          positions={segment}
+                          pathOptions={{
+                            color: route.color ?? "#006747",
+                            weight: selectedRouteId === route.id ? 7 : 5,
+                            opacity: selectedRouteId === route.id ? 0.98 : 0.88,
+                            lineCap: "round",
+                            lineJoin: "round",
+                          }}
+                        />,
+                      ]
+                    ))
+                  ))}
+                  {selectedRouteStops.map((stop) => (
+                    <CircleMarker
+                      key={stop.id}
+                      center={[stop.latitude, stop.longitude]}
+                      radius={6}
+                      pathOptions={{
+                        color: selectedRouteColor,
+                        fillColor: "#ffffff",
+                        fillOpacity: 0.95,
+                        weight: 3,
+                      }}
+                    >
+                      <Popup>
+                        <div className="min-w-[160px]">
+                          <p className="font-bold">{stop.name}</p>
+                          <p className="text-sm">{selectedRoute?.name}</p>
+                        </div>
+                      </Popup>
+                    </CircleMarker>
+                  ))}
                   {filteredVehicles.map((vehicle) => (
                     <Marker
                       key={vehicle.id}
@@ -337,18 +439,51 @@ export default function ShuttlePage() {
                     </Marker>
                   ))}
                 </MapContainer>
+              </div>
 
-                {filteredVehicles.length === 0 ? (
-                  <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                    <div className="glass-panel rounded-2xl px-5 py-4 text-center max-w-sm mx-4">
-                      <p className="font-bold text-on-surface">No active buses visible</p>
-                      <p className="text-sm text-on-surface-variant mt-2">
-                        {selectedRoute ? `No vehicles are currently reporting on ${selectedRoute.name}.` : "Passio is not reporting any active Bull Runner vehicles right now."}
-                      </p>
+              {operatingHoursAlert ? (
+                <div className="border-t border-outline-variant/20 bg-[linear-gradient(180deg,rgba(0,103,71,0.04),rgba(0,103,71,0.01))] px-6 py-5">
+                  <div className="flex items-start justify-between gap-5 flex-wrap">
+                    <div className="flex-1 min-w-[280px]">
+                      <span className="text-on-surface-variant font-body text-[10px] tracking-[0.22em] uppercase font-bold mb-2 block">Operating Hours</span>
+                      <h3 className="font-headline text-xl font-bold text-primary">{operatingHoursAlert.title}</h3>
+                      <div className="mt-2 space-y-1 text-sm text-on-surface-variant">
+                        <p>Updated {formatShuttleTimestamp(operatingHoursAlert.updated)}</p>
+                        {operatingHoursAlert.from || operatingHoursAlert.to ? (
+                          <p>
+                            Active {operatingHoursAlert.from ?? "?"} to {operatingHoursAlert.to ?? "?"}
+                          </p>
+                        ) : null}
+                      </div>
+                      <div className="mt-4 overflow-hidden rounded-2xl border border-primary/12 bg-surface-container-lowest">
+                        {operatingHourRows.map((row, index) => {
+                          return (
+                            <div
+                              key={`${operatingHoursAlert.id}-${row.key}`}
+                              className={cn(
+                                "flex flex-col gap-1 px-4 py-3 sm:flex-row sm:items-center sm:justify-between",
+                                index !== operatingHourRows.length - 1 ? "border-b border-outline-variant/15" : ""
+                              )}
+                            >
+                              <p className="text-sm font-bold text-on-surface">{row.dayLabel}</p>
+                              <p className="text-sm text-on-surface sm:text-right">{row.timeRange}</p>
+                            </div>
+                          );
+                        })}
+                      </div>
+                      {operatingHourNotes.length > 0 ? (
+                        <div className="mt-4 space-y-2">
+                          {operatingHourNotes.map((line, index) => (
+                            <p key={`${operatingHoursAlert.id}-note-${index}`} className="text-sm leading-6 text-on-surface-variant">
+                              {line}
+                            </p>
+                          ))}
+                        </div>
+                      ) : null}
                     </div>
                   </div>
-                ) : null}
-              </div>
+                </div>
+              ) : null}
             </div>
 
             <div className="xl:col-span-4 flex flex-col gap-6">
@@ -428,41 +563,6 @@ export default function ShuttlePage() {
             </div>
           </section>
 
-          {operatingHoursAlert ? (
-            <section className="glass-panel rounded-3xl p-6 md:p-7 mb-8 border border-primary/15 bg-[linear-gradient(135deg,rgba(0,103,71,0.08),rgba(0,103,71,0.02))]">
-              <div className="flex items-start justify-between gap-5 flex-wrap">
-                <div className="max-w-4xl flex-1 min-w-[280px]">
-                  <span className="text-on-surface-variant font-body text-[10px] tracking-[0.22em] uppercase font-bold mb-2 block">Operating Hours</span>
-                  <h2 className="font-headline text-2xl font-bold text-primary">{operatingHoursAlert.title}</h2>
-                  <div className="mt-5 grid grid-cols-1 md:grid-cols-2 gap-3">
-                    {operatingHoursLines.map((line, index) => {
-                      const isHighlight = /Monday - Thursday|Friday|Saturday - Sunday|Weekend Service/i.test(line);
-
-                      return (
-                        <div
-                          key={`${operatingHoursAlert.id}-${index}`}
-                          className={`rounded-2xl border px-4 py-3 ${isHighlight ? "border-primary/15 bg-surface-container-lowest shadow-[0_8px_20px_rgb(0,0,0,0.03)]" : "border-outline-variant/15 bg-surface-container-low/70"}`}
-                        >
-                          <p className={`text-sm leading-6 ${isHighlight ? "text-on-surface font-medium" : "text-on-surface-variant"}`}>{line}</p>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-
-                <div className="shrink-0 rounded-2xl bg-surface-container-lowest px-4 py-4 border border-outline-variant/20 min-w-[168px]">
-                  <p className="text-xs uppercase tracking-[0.18em] font-bold text-on-surface-variant">Updated</p>
-                  <p className="mt-2 font-headline text-xl font-bold text-on-surface">{formatShuttleTimestamp(operatingHoursAlert.updated)}</p>
-                  {operatingHoursAlert.from || operatingHoursAlert.to ? (
-                    <p className="mt-3 text-xs text-on-surface-variant leading-5">
-                      Active {operatingHoursAlert.from ?? "?"} to {operatingHoursAlert.to ?? "?"}
-                    </p>
-                  ) : null}
-                </div>
-              </div>
-            </section>
-          ) : null}
-
           <section className="glass-panel rounded-3xl p-6 md:p-7">
             <div className="flex items-end justify-between gap-4 mb-6 flex-wrap">
               <div>
@@ -487,7 +587,7 @@ export default function ShuttlePage() {
                 >
                   <div className="flex items-start justify-between gap-4 mb-4">
                     <div>
-                      <p className="font-headline text-xl font-bold text-on-surface">{route.name}</p>
+                      <p className="font-headline text-xl font-bold" style={{ color: route.color ?? "var(--color-on-surface)" }}>{route.name}</p>
                       <p className="text-sm text-on-surface-variant mt-1">{route.shortName ?? "Bull Runner route"}</p>
                     </div>
                     <span className="w-4 h-4 rounded-full shrink-0 mt-1" style={{ backgroundColor: route.color ?? "var(--color-primary)" }} />

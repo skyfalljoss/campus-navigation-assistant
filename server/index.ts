@@ -1,5 +1,7 @@
 import "dotenv/config";
 
+import { fileURLToPath } from "node:url";
+import path from "node:path";
 import { Prisma } from "@prisma/client";
 import { clerkMiddleware, getAuth } from "@clerk/express";
 import cors from "cors";
@@ -13,12 +15,16 @@ import { isScheduleDay, isScheduleSlotKey } from "../src/lib/schedule";
 const app = express();
 const port = Number(process.env.PORT ?? 4000);
 const maxRecentLocations = 8;
+const isProduction = process.env.NODE_ENV === "production";
 const clerkPublishableKey = process.env.CLERK_PUBLISHABLE_KEY ?? process.env.VITE_CLERK_PUBLISHABLE_KEY;
 const clerkSecretKey = process.env.CLERK_SECRET_KEY;
 const allowedOrigins = (process.env.CORS_ORIGIN ?? "http://localhost:3000")
   .split(",")
   .map((origin) => origin.trim())
   .filter(Boolean);
+const serverDirectory = path.dirname(fileURLToPath(import.meta.url));
+const distDirectory = path.resolve(serverDirectory, "../dist");
+const clientIndexPath = path.join(distDirectory, "index.html");
 
 app.use(
   cors({
@@ -484,6 +490,23 @@ app.delete(
     res.status(204).end();
   })
 );
+
+if (isProduction) {
+  app.use(express.static(distDirectory));
+
+  app.get("*", (req, res, next) => {
+    if (req.path.startsWith("/api")) {
+      next();
+      return;
+    }
+
+    res.sendFile(clientIndexPath, (error) => {
+      if (error) {
+        next(error);
+      }
+    });
+  });
+}
 
 app.use((error: unknown, _req: Request, res: Response, _next: NextFunction) => {
   console.error(error);

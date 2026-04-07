@@ -29,6 +29,13 @@ export interface ScheduleEntryRecord {
   updatedAt: string;
 }
 
+export interface ShuttleRouteStopRecord {
+  id: string;
+  name: string;
+  latitude: number;
+  longitude: number;
+}
+
 export interface ShuttleRouteRecord {
   id: string;
   name: string;
@@ -36,6 +43,8 @@ export interface ShuttleRouteRecord {
   color: string | null;
   serviceTimeShort: string | null;
   activeVehicleCount: number;
+  path?: Array<Array<[number, number]>>;
+  stops?: ShuttleRouteStopRecord[];
 }
 
 export interface ShuttleVehicleRecord {

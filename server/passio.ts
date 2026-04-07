@@ -12,6 +12,24 @@ interface PassioRoute {
   serviceTimeShort?: string | null;
 }
 
+interface PassioRoutePoint {
+  lat?: string | number | null;
+  lng?: string | number | null;
+}
+
+interface PassioStopsResponse {
+  routes?: Record<string, unknown[]>;
+  stops?: Record<string, { stopId?: string | number | null; name?: string | null; latitude?: string | number | null; longitude?: string | number | null }>;
+  routePoints?: Record<string, PassioRoutePoint[][]>;
+}
+
+export interface ShuttleRouteStopRecord {
+  id: string;
+  name: string;
+  latitude: number;
+  longitude: number;
+}
+
 interface PassioVehicle {
   busId?: string | null;
   busName?: string | null;
@@ -41,6 +59,8 @@ export interface ShuttleRouteRecord {
   color: string | null;
   serviceTimeShort: string | null;
   activeVehicleCount: number;
+  path: Array<Array<[number, number]>>;
+  stops: ShuttleRouteStopRecord[];
 }
 
 export interface ShuttleVehicleRecord {
@@ -186,10 +206,32 @@ async function postPassio<T>(path: string, body: JsonRecord) {
 }
 
 export async function fetchShuttleSnapshot(systemId = DEFAULT_SYSTEM_ID): Promise<ShuttleSnapshot> {
-  const [routesPayload, vehiclesPayload, alertsPayload] = await Promise.all([
+  const [routesPayload, routeStopsPayload, vehiclesPayload, alertsPayload] = await Promise.all([
     postPassio<unknown>("/mapGetData.php?getRoutes=1", {
       systemSelected0: systemId,
       amount: 1,
+    }),
+    fetch(
+      `${PASSIO_BASE_URL}/mapGetData.php?getStops=2&deviceId=0&withOutdated=1&wBounds=1&buildNo=0&showBusInOos=0`,
+      {
+        method: "POST",
+        headers: {
+          Accept: "application/json",
+          "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
+        },
+        body: new URLSearchParams({
+          json: JSON.stringify({
+            s0: Number(systemId),
+            sA: 1,
+          }),
+        }),
+      }
+    ).then(async (response) => {
+      if (!response.ok) {
+        throw new Error(`Passio request failed with status ${response.status}.`);
+      }
+
+      return (await response.json()) as PassioStopsResponse;
     }),
     postPassio<{ buses?: Record<string, unknown>; time?: Record<string, string> }>("/mapGetData.php?getBuses=2", {
       s0: systemId,
@@ -209,6 +251,40 @@ export async function fetchShuttleSnapshot(systemId = DEFAULT_SYSTEM_ID): Promis
     color: normalizeColor(readString(route.color)),
     serviceTimeShort: readString(route.serviceTimeShort) || null,
     activeVehicleCount: 0,
+    path: (routeStopsPayload.routePoints?.[readString(route.myid) || readString(route.id)] ?? []).map((segment) =>
+      segment.flatMap((point) => {
+        const latitude = readNumber(point.lat);
+        const longitude = readNumber(point.lng);
+
+        return latitude === null || longitude === null ? [] : ([[latitude, longitude]] as Array<[number, number]>);
+      })
+    ).filter((segment) => segment.length > 1),
+    stops: (routeStopsPayload.routes?.[readString(route.myid) || readString(route.id)] ?? []).flatMap((entry) => {
+      if (!Array.isArray(entry) || entry.length < 2) {
+        return [];
+      }
+
+      const stopId = readString(entry[1]);
+      if (!stopId) {
+        return [];
+      }
+
+      const stop = routeStopsPayload.stops?.[`ID${stopId}`];
+      const latitude = readNumber(stop?.latitude);
+      const longitude = readNumber(stop?.longitude);
+      if (latitude === null || longitude === null) {
+        return [];
+      }
+
+      return [
+        {
+          id: readString(stop?.stopId) || stopId,
+          name: readString(stop?.name) || `Stop ${stopId}`,
+          latitude,
+          longitude,
+        } satisfies ShuttleRouteStopRecord,
+      ];
+    }),
   }));
 
   const routeMap = new Map(routes.map((route) => [route.id, route]));

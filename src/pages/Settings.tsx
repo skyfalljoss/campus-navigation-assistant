@@ -42,9 +42,9 @@ export default function SettingsPage() {
         return storedTheme;
       }
 
-      return document.documentElement.classList.contains("dark") ? "dark" : "light";
+      return "system";
     }
-    return "light";
+    return "system";
   });
   const [pushPermission, setPushPermission] = useState<NotificationPermission | "unsupported">(() => {
     if (typeof window === "undefined" || !("Notification" in window)) {

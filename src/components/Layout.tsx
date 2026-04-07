@@ -108,7 +108,12 @@ export function TopBar({ isSidebarOpen }: { isSidebarOpen: boolean }) {
         <button className="text-on-surface hover:text-primary transition-colors">
           <Bell className="w-5 h-5" />
         </button>
-        <button className="hidden md:block text-on-surface hover:text-primary transition-colors">
+        <button
+          type="button"
+          onClick={() => navigate("/settings")}
+          className="hidden md:block text-on-surface hover:text-primary transition-colors"
+          aria-label="Open settings"
+        >
           <Settings className="w-5 h-5" />
         </button>
         <SignedOut>

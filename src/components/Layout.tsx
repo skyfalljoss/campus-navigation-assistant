@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import { useEffect, useRef, useState, type ChangeEvent, type FormEvent, type ReactNode } from "react";
 import { SignedIn, SignedOut, SignInButton, UserButton } from "@clerk/clerk-react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { 
@@ -20,12 +20,12 @@ export function Sidebar({ isOpen, toggle }: { isOpen: boolean, toggle: () => voi
 
   return (
     <aside className={cn(
-      "fixed left-0 top-0 h-full z-[60] bg-surface-container-lowest flex-col py-8 shadow-[4px_0_24px_rgba(0,0,0,0.02)] transition-all duration-300 hidden md:flex",
+      "fixed left-0 top-0 h-full z-[130] bg-surface-container-lowest flex-col py-8 shadow-[4px_0_24px_rgba(0,0,0,0.02)] transition-all duration-300 hidden md:flex",
       isOpen ? "w-72" : "w-24"
     )}>
       <button 
         onClick={toggle}
-        className="absolute -right-4 top-10 bg-primary text-on-primary p-1.5 rounded-full shadow-lg hover:scale-110 transition-transform z-50 flex items-center justify-center"
+        className="absolute -right-4 top-10 z-[140] flex items-center justify-center rounded-full bg-primary p-1.5 text-on-primary shadow-lg transition-transform hover:scale-110"
       >
         {isOpen ? <ChevronLeft className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
       </button>
@@ -77,41 +77,96 @@ export function Sidebar({ isOpen, toggle }: { isOpen: boolean, toggle: () => voi
 
 export function TopBar({ isSidebarOpen }: { isSidebarOpen: boolean }) {
   const navigate = useNavigate();
+  const location = useLocation();
+  const isMapPage = location.pathname === "/map";
   const [searchQuery, setSearchQuery] = useState("");
+  const searchInputRef = useRef<HTMLInputElement | null>(null);
 
-  const handleSearch = (e: React.FormEvent) => {
+  const handleSearch = (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    if (searchQuery.trim()) {
-      navigate(`/map?q=${encodeURIComponent(searchQuery)}`);
+    const trimmedQuery = searchQuery.trim();
+
+    if (trimmedQuery) {
+      navigate(`/map?q=${encodeURIComponent(trimmedQuery)}`);
       setSearchQuery("");
     }
   };
 
+  const focusSearchInput = () => {
+    searchInputRef.current?.focus();
+  };
+
+  const openMapSearch = () => {
+    if (location.pathname !== "/map") {
+      navigate("/map");
+      return;
+    }
+
+    focusSearchInput();
+  };
+
+  const openNotifications = () => {
+    navigate("/settings#notifications");
+  };
+
+  const openSettings = () => {
+    navigate("/settings");
+  };
+
   return (
     <header className={cn(
-      "fixed top-0 right-0 z-50 flex justify-between md:justify-end items-center px-6 py-4 bg-surface/80 backdrop-blur-xl transition-all duration-300",
+      "relative ml-auto flex justify-between md:justify-end items-center px-6 py-4 bg-surface/80 backdrop-blur-xl transition-all duration-300 pointer-events-auto",
       isSidebarOpen ? "w-full md:w-[calc(100%-18rem)]" : "w-full md:w-[calc(100%-6rem)]"
     )}>
       <div className="text-xl font-bold tracking-tighter text-primary font-headline md:hidden">USF Assistant</div>
       
-      <div className="flex gap-4 items-center">
-        <form onSubmit={handleSearch} className="hidden md:flex items-center bg-surface-container-high rounded-xl px-4 py-2 mr-4">
-          <Search className="text-on-surface-variant w-4 h-4 mr-2" />
+      <div className="flex items-center gap-2 md:gap-3 pointer-events-auto">
+        <form
+          onSubmit={handleSearch}
+          onClick={focusSearchInput}
+          className={cn(
+          "items-center rounded-xl border border-transparent bg-surface-container-high px-4 py-2 transition-colors hover:border-outline-variant/40 focus-within:border-primary/30",
+          isMapPage ? "hidden" : "hidden md:flex"
+        )}>
+          <button
+            type="submit"
+            className="mr-2 flex h-8 w-8 items-center justify-center rounded-full text-on-surface-variant transition-colors hover:bg-surface-container"
+            aria-label="Search campus"
+          >
+            <Search className="w-4 h-4" />
+          </button>
           <input 
+            ref={searchInputRef}
             className="bg-transparent border-none text-sm text-on-surface placeholder:text-on-surface-variant/50 focus:ring-0 focus:outline-none w-48 font-body" 
             placeholder="Search campus..." 
             type="text"
             value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
+            onChange={(e: ChangeEvent<HTMLInputElement>) => setSearchQuery(e.target.value)}
           />
         </form>
-        <button className="text-on-surface hover:text-primary transition-colors">
+        <button
+          type="button"
+          onClick={openMapSearch}
+          className={cn(
+            "flex h-10 w-10 items-center justify-center rounded-full text-on-surface transition-colors hover:bg-surface-container hover:text-primary",
+            isMapPage ? "hidden" : "md:hidden"
+          )}
+          aria-label="Open map search"
+        >
+          <Search className="w-5 h-5" />
+        </button>
+        <button
+          type="button"
+          onClick={openNotifications}
+          className="flex h-10 w-10 items-center justify-center rounded-full text-on-surface transition-colors hover:bg-surface-container hover:text-primary"
+          aria-label="Open notification settings"
+        >
           <Bell className="w-5 h-5" />
         </button>
         <button
           type="button"
-          onClick={() => navigate("/settings")}
-          className="hidden md:block text-on-surface hover:text-primary transition-colors"
+          onClick={openSettings}
+          className="flex h-10 w-10 items-center justify-center rounded-full text-on-surface transition-colors hover:bg-surface-container hover:text-primary"
           aria-label="Open settings"
         >
           <Settings className="w-5 h-5" />
@@ -145,7 +200,7 @@ export function BottomNav() {
   ];
 
   return (
-    <nav className="fixed bottom-0 left-0 w-full flex justify-around items-center px-4 pb-6 pt-3 bg-surface/80 backdrop-blur-lg z-50 rounded-t-3xl md:hidden border-t border-outline-variant/20">
+    <nav className="fixed bottom-0 left-0 w-full flex justify-around items-center px-3 pb-[max(1rem,env(safe-area-inset-bottom))] pt-2.5 bg-surface/88 backdrop-blur-xl z-50 rounded-t-[1.6rem] md:hidden border-t border-outline-variant/15 shadow-[0_-10px_30px_rgba(12,16,15,0.08)]">
       {navItems.map((item) => {
         const isActive = location.pathname === item.path || (item.path === '/map' && location.pathname === '/map');
         return (
@@ -153,12 +208,12 @@ export function BottomNav() {
             key={item.path}
             to={item.path}
             className={cn(
-              "flex flex-col items-center justify-center group",
+              "flex min-w-0 flex-col items-center justify-center gap-0.5 rounded-xl px-2 py-1.5 group transition-colors",
               isActive ? "text-primary" : "text-on-surface/50"
             )}
           >
-            <item.icon className={cn("w-6 h-6", isActive && "fill-primary/20")} />
-            <span className="font-label text-[10px] font-bold uppercase tracking-widest mt-1">
+            <item.icon className={cn("w-5 h-5", isActive && "fill-primary/20")} />
+            <span className="font-label text-[10px] font-bold uppercase tracking-[0.16em] leading-none">
               {item.label}
             </span>
           </Link>
@@ -168,11 +223,31 @@ export function BottomNav() {
   );
 }
 
-export function Layout({ children }: { children: React.ReactNode }) {
+export function Layout({ children }: { children: ReactNode }) {
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
+  const location = useLocation();
+  const isMapPage = location.pathname === "/map";
+  const [isMapChromeVisible, setIsMapChromeVisible] = useState(true);
+
+  useEffect(() => {
+    if (!isMapPage) {
+      setIsMapChromeVisible(true);
+      return;
+    }
+
+    const handleMapChromeVisibility = (event: Event) => {
+      const customEvent = event as CustomEvent<{ visible?: boolean }>;
+      setIsMapChromeVisible(customEvent.detail?.visible ?? true);
+    };
+
+    window.addEventListener("map-chrome-visibility", handleMapChromeVisibility as EventListener);
+    return () => {
+      window.removeEventListener("map-chrome-visibility", handleMapChromeVisibility as EventListener);
+    };
+  }, [isMapPage]);
 
   return (
-    <div className="relative min-h-screen w-full bg-surface text-on-surface">
+    <div className="relative isolate min-h-screen w-full bg-surface text-on-surface">
       <div className="fixed inset-0 z-0 pointer-events-none overflow-hidden">
         <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[120%] h-[120%] opacity-[0.15] dark:opacity-10 bg-[radial-gradient(circle_at_center,_var(--color-primary),_transparent,_transparent)]"></div>
         <div className="absolute -right-20 top-20 w-[600px] h-[600px] opacity-30 dark:opacity-20 hidden xl:block">
@@ -186,15 +261,26 @@ export function Layout({ children }: { children: React.ReactNode }) {
           </div>
         </div>
       </div>
-      <TopBar isSidebarOpen={isSidebarOpen} />
+      <div className={cn(
+        "pointer-events-none fixed inset-x-0 top-0 z-[120] transition-all duration-300",
+        isMapPage && !isMapChromeVisible ? "pointer-events-none opacity-0 -translate-y-4" : "opacity-100 translate-y-0"
+      )}>
+        <TopBar isSidebarOpen={isSidebarOpen} />
+      </div>
       <Sidebar isOpen={isSidebarOpen} toggle={() => setIsSidebarOpen(!isSidebarOpen)} />
       <main className={cn(
-        "relative min-h-screen w-full flex flex-col pt-24 pb-24 md:pb-10 transition-all duration-300",
-        isSidebarOpen ? "md:pl-72" : "md:pl-24"
+        "relative z-10 min-h-screen w-full flex flex-col transition-all duration-300",
+        isMapPage
+          ? isMapChromeVisible
+            ? cn("pt-24 pb-24 md:pb-10", isSidebarOpen ? "md:pl-72" : "md:pl-24")
+            : cn("pt-0 pb-0", isSidebarOpen ? "md:pl-72" : "md:pl-24")
+          : cn("pt-24 pb-24 md:pb-10", isSidebarOpen ? "md:pl-72" : "md:pl-24")
       )}>
         {children}
       </main>
-      <BottomNav />
+      <div className="transition-all duration-300 md:hidden">
+        <BottomNav />
+      </div>
     </div>
   );
 }

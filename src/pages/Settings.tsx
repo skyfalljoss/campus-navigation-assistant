@@ -1,5 +1,6 @@
 import { useClerk } from "@clerk/clerk-react";
 import { Bell, Monitor, Moon, Shield, Smartphone, Sun } from "lucide-react";
+import { useLocation } from "react-router-dom";
 import { useEffect, useState } from "react";
 import {
   EMAIL_UPDATES_STORAGE_KEY,
@@ -34,6 +35,7 @@ function Toggle({
 }
 
 export default function SettingsPage() {
+  const location = useLocation();
   const { openUserProfile } = useClerk();
   const [theme, setTheme] = useState<"dark" | "light" | "system">(() => {
     if (typeof window !== "undefined") {
@@ -159,6 +161,20 @@ export default function SettingsPage() {
   }, []);
 
   const pushNotificationsEnabled = pushPermission === "granted" && pushUpdatesEnabled;
+
+  useEffect(() => {
+    if (!location.hash) {
+      return;
+    }
+
+    const targetId = location.hash.slice(1);
+    const targetElement = document.getElementById(targetId);
+    if (!targetElement) {
+      return;
+    }
+
+    targetElement.scrollIntoView({ behavior: "smooth", block: "start" });
+  }, [location.hash]);
   const locationServicesActive = locationPermission === "granted" && locationServicesEnabled;
 
   const handlePushToggle = async () => {
@@ -263,7 +279,7 @@ export default function SettingsPage() {
 
       <div className="space-y-12">
         {/* Appearance Section */}
-        <section>
+        <section id="notifications">
           <h2 className="font-headline text-xl font-bold text-on-surface mb-6 flex items-center gap-2">
             <Monitor className="w-5 h-5 text-primary" /> Appearance
           </h2>

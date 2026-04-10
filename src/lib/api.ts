@@ -79,6 +79,32 @@ export interface ShuttleOverviewRecord {
   alerts: ShuttleAlertRecord[];
 }
 
+export interface NavigationStepRecord {
+  instruction: string;
+  distanceMeters: number;
+  pathName: string | null;
+  waypoints: [number, number] | null;
+}
+
+export interface NavigationRouteRecord {
+  coordinates: Array<[number, number]>;
+  distanceMeters: number;
+  durationMinutes: number;
+  steps: NavigationStepRecord[];
+  bounds: [[number, number], [number, number]] | null;
+}
+
+export interface NavigationResponseRecord {
+  destination: {
+    buildingId: string;
+    roomId: string | null;
+    arrival: [number, number];
+    arrivalLabel: string;
+    arrivalHint: string;
+  };
+  route: NavigationRouteRecord;
+}
+
 interface RecentLocationPayload {
   buildingId: string;
   roomId?: string | null;
@@ -95,6 +121,12 @@ interface ScheduleEntryPayload {
 
 interface BulkSchedulePayload {
   entries: ScheduleEntryPayload[];
+}
+
+interface NavigationRoutePayload {
+  start: [number, number];
+  destinationBuildingId: string;
+  roomId?: string | null;
 }
 
 function getApiUrl(path: string) {
@@ -279,4 +311,11 @@ export async function fetchShuttleVehicles() {
 export async function fetchShuttleAlerts() {
   const response = await apiRequest<{ alerts: ShuttleAlertRecord[] }>("/api/shuttle/alerts", { method: "GET" });
   return response.alerts;
+}
+
+export async function fetchNavigationRoute(payload: NavigationRoutePayload) {
+  return apiRequest<NavigationResponseRecord>("/api/navigation/route", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
 }

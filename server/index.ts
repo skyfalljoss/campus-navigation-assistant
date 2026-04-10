@@ -10,6 +10,7 @@ import { randomUUID } from "node:crypto";
 
 import { prisma } from "./prisma";
 import { fetchShuttleSnapshot } from "./passio";
+import { getWalkingRoute, NavigationError, readRouteRequest } from "./navigation";
 import { isScheduleDay, isScheduleSlotKey } from "../src/lib/schedule";
 
 const app = express();
@@ -26,10 +27,28 @@ const serverDirectory = path.dirname(fileURLToPath(import.meta.url));
 const distDirectory = path.resolve(serverDirectory, "../dist");
 const clientIndexPath = path.join(distDirectory, "index.html");
 
+function isAllowedDevelopmentOrigin(origin: string) {
+  try {
+    const parsedOrigin = new URL(origin);
+    const hostname = parsedOrigin.hostname;
+
+    return (
+      hostname === "localhost" ||
+      hostname === "127.0.0.1" ||
+      hostname.endsWith(".local") ||
+      /^192\.168\./.test(hostname) ||
+      /^10\./.test(hostname) ||
+      /^172\.(1[6-9]|2\d|3[0-1])\./.test(hostname)
+    );
+  } catch {
+    return false;
+  }
+}
+
 app.use(
   cors({
     origin(origin, callback) {
-      if (!origin || allowedOrigins.includes(origin)) {
+      if (!origin || allowedOrigins.includes(origin) || (!isProduction && isAllowedDevelopmentOrigin(origin))) {
         callback(null, true);
         return;
       }
@@ -97,6 +116,24 @@ function readScheduleEntry(value: unknown) {
 app.get("/api/health", (_req, res) => {
   res.json({ status: "ok" });
 });
+
+app.post(
+  "/api/navigation/route",
+  asyncHandler(async (req, res) => {
+    try {
+      const { start, destinationBuildingId, roomId } = readRouteRequest(req.body);
+      const route = await getWalkingRoute(start, destinationBuildingId, roomId);
+      res.json(route);
+    } catch (error) {
+      if (error instanceof NavigationError) {
+        res.status(error.statusCode).json({ error: error.message });
+        return;
+      }
+
+      throw error;
+    }
+  })
+);
 
 app.get(
   "/api/shuttle/overview",

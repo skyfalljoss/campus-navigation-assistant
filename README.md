@@ -80,6 +80,7 @@ Usually keep these local values:
 Optional:
 
 - `PASSIO_SYSTEM_ID`
+- `OPENROUTESERVICE_API_KEY` for real walking routes on the map
 
 ## Windows Setup
 
@@ -322,6 +323,7 @@ Check that:
 
 - During local development, the frontend proxies `/api` to `http://localhost:4000`.
 - `VITE_API_BASE_URL` is only needed if the frontend and API are hosted on different domains.
+- Live map routing now depends on `OPENROUTESERVICE_API_KEY`; without it, the map can still load but turn-by-turn walking routes will fail.
 - Signed-in features require Clerk to be configured correctly.
 
 ## Contributors

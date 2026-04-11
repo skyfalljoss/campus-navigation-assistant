@@ -34,16 +34,17 @@ model RecentSearch {
 }
 
 model ScheduleEntry {
-  id        String   @id @default(cuid())
-  userId    String
-  course    String
-  room      String
+  id         String   @id @default(cuid())
+  userId     String
+  course     String
+  room       String
   buildingId String
-  dayOfWeek String
-  slotKey   String
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  dayOfWeek  String
+  startTime  String
+  endTime    String
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
 
-  @@unique([userId, dayOfWeek, slotKey])
   @@index([userId, updatedAt])
+  @@index([userId, dayOfWeek, startTime])
 }

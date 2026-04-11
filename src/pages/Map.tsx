@@ -4,7 +4,7 @@ import { Link, useSearchParams } from "react-router-dom";
 import { Search, Navigation, X, Bookmark, BookmarkCheck, MapPin, Footprints, Coffee, Car, BookOpen, HelpCircle, LocateFixed, AlertCircle, ChevronRight, ArrowUp, CornerUpLeft, CornerUpRight, Flag, Check, Volume2, VolumeX } from "lucide-react";
 import { MapContainer, TileLayer, Marker, Polyline, useMap, useMapEvents } from "react-leaflet";
 import L from "leaflet";
-import { BUILDINGS, type Building, type Room } from "../data/buildings";
+import { BUILDINGS, type Building, type BuildingTag, type Room } from "../data/buildings";
 import { fetchNavigationRoute, fetchSavedLocations, recordRecentLocation, removeSavedLocation, saveLocation, type NavigationResponseRecord } from "../lib/api";
 import { CAMPUS_CENTER, formatDistance, formatEta, getDistanceMeters, getWalkabilityLabel, writeStoredUserLocation } from "../lib/navigation";
 import { isLocationServicesEnabled } from "../lib/preferences";
@@ -47,12 +47,16 @@ function getLocationErrorMessage(error: GeolocationPositionError) {
   }
 }
 
-function getArrivalInstruction(building: Building, entranceLabel: string, room?: Room | null) {
+function getArrivalInstruction(building: Building, entranceLabel: string, arrivalHint?: string | null, room?: Room | null) {
+  const detail = arrivalHint?.trim();
+
   if (room) {
-    return `You will arrive at the ${entranceLabel} of ${building.name}. ${room.name} is on the ${room.floor.toLowerCase()}.`;
+    return detail
+      ? `You will arrive at the ${entranceLabel} of ${building.name}. ${detail} ${room.name} is on the ${room.floor.toLowerCase()}.`
+      : `You will arrive at the ${entranceLabel} of ${building.name}. ${room.name} is on the ${room.floor.toLowerCase()}.`;
   }
 
-  return `You will arrive at the ${entranceLabel} of ${building.name}.`;
+  return detail ? `You will arrive at the ${entranceLabel} of ${building.name}. ${detail}` : `You will arrive at the ${entranceLabel} of ${building.name}.`;
 }
 
 const LOCATION_SETTINGS_DISABLED_MESSAGE = "Location Services are turned off in Settings. Turn them on there to use live navigation.";
@@ -230,7 +234,7 @@ export default function MapPage() {
   const shouldAutoNavigate = searchParams.get("navigate") === "1";
   
   const [searchQuery, setSearchQuery] = useState(q || "");
-  const [activeFilter, setActiveFilter] = useState<string | null>(null);
+  const [activeFilter, setActiveFilter] = useState<BuildingTag | null>(null);
   const [selectedBuilding, setSelectedBuilding] = useState<Building | null>(null);
   const [selectedRoom, setSelectedRoom] = useState<string | null>(null);
   const [isNavigating, setIsNavigating] = useState(false);
@@ -468,12 +472,17 @@ export default function MapPage() {
     void requestNavigationRoute(userLocation, { quiet: true });
   }, [isNavigating, navigationRoute, selectedBuilding, userLocation]);
 
+  const normalizedSearchQuery = searchQuery.trim().toLowerCase();
   const filteredResults = BUILDINGS.filter(b => !activeFilter || b.tags.includes(activeFilter)).map(b => {
-    const bMatch = b.name.toLowerCase().includes(searchQuery.toLowerCase());
+    const keywordMatch = b.searchKeywords?.some((keyword) => keyword.toLowerCase().includes(normalizedSearchQuery)) ?? false;
+    const bMatch =
+      b.name.toLowerCase().includes(normalizedSearchQuery) ||
+      b.desc.toLowerCase().includes(normalizedSearchQuery) ||
+      keywordMatch;
     const matchedRooms = b.rooms.filter(r => 
-      r.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
-      r.desc.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      r.floor.toLowerCase().includes(searchQuery.toLowerCase())
+      r.name.toLowerCase().includes(normalizedSearchQuery) || 
+      r.desc.toLowerCase().includes(normalizedSearchQuery) ||
+      r.floor.toLowerCase().includes(normalizedSearchQuery)
     );
     return { building: b, matchedRooms, bMatch };
   }).filter(res => res.bMatch || res.matchedRooms.length > 0);
@@ -530,6 +539,8 @@ export default function MapPage() {
   const spokenNextInstruction = nextStep ? getSpokenInstruction(nextStep) : null;
   const arrivalLabel = navigationRoute?.destination.arrivalLabel ?? selectedBuilding?.primaryEntranceLabel ?? "primary entrance";
   const arrivalHint = navigationRoute?.destination.arrivalHint ?? selectedBuilding?.primaryEntranceHint ?? "Follow the highlighted route to the marked entrance.";
+  const arrivalInstruction = navigationRoute?.destination.arrivalInstruction
+    ?? (selectedBuilding ? getArrivalInstruction(selectedBuilding, arrivalLabel, arrivalHint, selectedRoomData) : null);
   const supportsVoiceGuidance = typeof window !== "undefined" && "speechSynthesis" in window;
   const isNearArrival = Boolean(
     userLocation && navigationRoute && getDistanceMeters(userLocation, navigationRoute.destination.arrival) <= ARRIVAL_RADIUS_METERS
@@ -575,7 +586,7 @@ export default function MapPage() {
     }
 
     const instructionToSpeak = isNearArrival
-      ? `You are arriving at the ${arrivalLabel} of ${selectedBuilding?.name ?? "your destination"}.`
+      ? arrivalInstruction ?? `You are arriving at the ${arrivalLabel} of ${selectedBuilding?.name ?? "your destination"}.`
       : spokenNextInstruction;
 
     if (!instructionToSpeak || lastSpokenInstructionRef.current === instructionToSpeak) {
@@ -592,7 +603,7 @@ export default function MapPage() {
     return () => {
       utterance.onend = null;
     };
-  }, [arrivalLabel, isNearArrival, isNavigating, isVoiceGuidanceEnabled, selectedBuilding?.name, spokenNextInstruction]);
+  }, [arrivalInstruction, arrivalLabel, isNearArrival, isNavigating, isVoiceGuidanceEnabled, selectedBuilding?.name, spokenNextInstruction]);
 
   const startNavigation = () => {
     if (!selectedBuilding) {
@@ -1098,7 +1109,7 @@ export default function MapPage() {
                       </div>
 
                       <div className="flex flex-col items-start gap-2 sm:flex-row sm:items-center sm:justify-between border-b border-primary/10 px-4 py-3 md:px-5 text-xs text-on-surface-variant">
-                        <p className="leading-5">{isNearArrival ? `You are almost at the ${arrivalLabel}.` : `Route ends at the ${arrivalLabel}.`}</p>
+                        <p className="leading-5">{isNearArrival ? arrivalInstruction ?? `You are almost at the ${arrivalLabel}.` : `Route ends at the ${arrivalLabel}.`}</p>
                         {supportsVoiceGuidance ? (
                           <button
                             onClick={() => setIsVoiceGuidanceEnabled((current) => !current)}
@@ -1127,7 +1138,7 @@ export default function MapPage() {
                                 })()}
                               </div>
                               <div className="min-w-0 flex-1">
-                                <p className="text-sm md:text-[15px] font-semibold leading-6 text-on-surface">{isNearArrival ? `Arrive at the ${arrivalLabel} of ${selectedBuilding.name}.` : spokenNextInstruction}</p>
+                                <p className="text-sm md:text-[15px] font-semibold leading-6 text-on-surface">{isNearArrival ? arrivalInstruction ?? `Arrive at the ${arrivalLabel} of ${selectedBuilding.name}.` : spokenNextInstruction}</p>
                                 <div className="mt-1.5 flex flex-wrap items-center gap-1.5 text-[11px] md:text-xs text-on-surface-variant">
                                   {nextStep.distanceMeters > 0 ? <span className="rounded-full bg-surface-container-high px-2.5 py-1 font-semibold text-on-surface-variant">{formatDistance(nextStep.distanceMeters)}</span> : null}
                                   {nextStep.pathName ? <span className="rounded-full bg-surface-container-high px-2.5 py-1 font-semibold text-on-surface-variant">{nextStep.pathName}</span> : null}
@@ -1234,7 +1245,7 @@ export default function MapPage() {
                     })()}
                   </div>
                   <div className="min-w-0">
-                    <p className="map-clamp-2 text-sm font-semibold leading-6 text-on-surface">{isNearArrival ? `Arrive at the ${arrivalLabel} of ${selectedBuilding.name}.` : spokenNextInstruction ?? "Continue toward the building entrance."}</p>
+                    <p className="map-clamp-2 text-sm font-semibold leading-6 text-on-surface">{isNearArrival ? arrivalInstruction ?? `Arrive at the ${arrivalLabel} of ${selectedBuilding.name}.` : spokenNextInstruction ?? "Continue toward the building entrance."}</p>
                     <p className="mt-1 text-xs text-on-surface-variant">Step {Math.min(activeStepIndex + 1, navigationSteps.length)} of {navigationSteps.length}</p>
                   </div>
                 </div>
@@ -1290,7 +1301,7 @@ export default function MapPage() {
                       <Flag className="h-4.5 w-4.5" />
                     </div>
                     <div>
-                      <p className="font-medium leading-6">{getArrivalInstruction(selectedBuilding, arrivalLabel, selectedRoomData)}</p>
+                      <p className="font-medium leading-6">{arrivalInstruction ?? getArrivalInstruction(selectedBuilding, arrivalLabel, arrivalHint, selectedRoomData)}</p>
                       <p className="mt-1 text-xs text-on-surface-variant">{`Outdoor walking directions end at the ${arrivalLabel} for this building.`}</p>
                     </div>
                   </div>

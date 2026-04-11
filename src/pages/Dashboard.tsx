@@ -1,12 +1,33 @@
 import { SignInButton, useAuth } from "@clerk/clerk-react";
-import { useEffect, useMemo, useState, type FormEvent } from "react";
-import { Search, Library, Building2, Wrench, Dumbbell, Bus, ArrowRight, Navigation, Map as MapIcon, Coffee, Car, CalendarDays, Plus, X, PencilLine, Trash2, Upload, Download, ChevronDown, ChevronUp, AlertTriangle, RefreshCw, type LucideIcon } from "lucide-react";
+import { DndContext, PointerSensor, TouchSensor, closestCenter, useDraggable, useDroppable, useSensor, useSensors, type DragEndEvent, type DragStartEvent } from "@dnd-kit/core";
+import { CSS } from "@dnd-kit/utilities";
+import { useEffect, useMemo, useState, type FormEvent, type ReactNode } from "react";
+import { Search, Library, Building2, Wrench, Dumbbell, Bus, ArrowRight, Navigation, Map as MapIcon, Coffee, Car, CalendarDays, Plus, X, PencilLine, Trash2, Upload, Download, ChevronDown, ChevronUp, AlertTriangle, RefreshCw, GripVertical, type LucideIcon } from "lucide-react";
 import { Link, useNavigate } from "react-router-dom";
 import { BUILDINGS } from "../data/buildings";
 import { bulkUpsertScheduleEntries, createScheduleEntry, deleteScheduleEntry, fetchRecentLocations, fetchScheduleEntries, fetchShuttleOverview, type RecentLocationRecord, type ScheduleEntryRecord, type ShuttleOverviewRecord, updateScheduleEntry } from "../lib/api";
 import { buildRoute, CAMPUS_CENTER, formatEta, getWalkabilityLabel, readStoredUserLocation, writeStoredUserLocation, type Coordinates } from "../lib/navigation";
 import { subscribeToRecentDestinationsUpdates } from "../lib/recent-destinations";
-import { SCHEDULE_DAYS, SCHEDULE_SLOTS, type ScheduleDay, type ScheduleSlotKey } from "../lib/schedule";
+import {
+  DEFAULT_SCHEDULE_DAY,
+  DEFAULT_SCHEDULE_END_TIME,
+  DEFAULT_SCHEDULE_START_TIME,
+  SCHEDULE_DAYS,
+  buildScheduleTimeOptions,
+  buildScheduleVisibleTimeRows,
+  compareScheduleTimes,
+  formatScheduleTimeLabel,
+  getScheduleDisplayRowStart,
+  getScheduleConflictIds,
+  scheduleMinutesToTime,
+  scheduleTimeToMinutes,
+  getShiftedScheduleRange,
+  isScheduleDay,
+  isScheduleRangeValid,
+  parseLegacyScheduleSlotInput,
+  parseScheduleTimeInput,
+  type ScheduleDay,
+} from "../lib/schedule";
 
 interface DestinationCard {
   key: string;
@@ -23,7 +44,26 @@ interface ScheduleFormState {
   room: string;
   buildingId: string;
   dayOfWeek: ScheduleDay;
-  slotKey: ScheduleSlotKey;
+  startTime: string;
+  endTime: string;
+}
+
+interface ScheduleCardProps {
+  entry: ScheduleEntryRecord;
+  appearance: ReturnType<typeof getScheduleEntryAppearance>;
+  routeTarget: ReturnType<typeof getScheduleRouteTarget>;
+  isConflict: boolean;
+  isDragging?: boolean;
+  onEdit: (entry: ScheduleEntryRecord) => void;
+  compact?: boolean;
+}
+
+interface ScheduleDropCellProps {
+  cellId: string;
+  dayLabel: string;
+  timeLabel: string;
+  isMobile?: boolean;
+  children: ReactNode;
 }
 
 const SCHEDULE_COLLAPSED_STORAGE_KEY = "usf_dashboard_schedule_collapsed";
@@ -107,18 +147,50 @@ function buildRecentDestinationCard(recentLocation: RecentLocationRecord) {
   } satisfies DestinationCard;
 }
 
-function createDefaultScheduleForm(dayOfWeek: ScheduleDay = "mon", slotKey: ScheduleSlotKey = "09:30") {
+function createDefaultScheduleForm(dayOfWeek: ScheduleDay = DEFAULT_SCHEDULE_DAY, startTime: string = DEFAULT_SCHEDULE_START_TIME) {
+  const defaultRange = getShiftedScheduleRange(DEFAULT_SCHEDULE_START_TIME, DEFAULT_SCHEDULE_END_TIME, startTime);
+
   return {
     course: "",
     room: "",
     buildingId: BUILDINGS[0]?.id ?? "",
     dayOfWeek,
-    slotKey,
+    startTime,
+    endTime: defaultRange?.endTime ?? DEFAULT_SCHEDULE_END_TIME,
   } satisfies ScheduleFormState;
 }
 
-function getScheduleCellKey(dayOfWeek: string, slotKey: string) {
-  return `${dayOfWeek}:${slotKey}`;
+function getScheduleCellKey(dayOfWeek: string, startTime: string) {
+  return `${dayOfWeek}:${startTime}`;
+}
+
+function getScheduleDragId(entryId: string) {
+  return `schedule-entry:${entryId}`;
+}
+
+function getScheduleDropCellId(dayOfWeek: string, startTime: string) {
+  return `schedule-cell:${dayOfWeek}:${startTime}`;
+}
+
+function parseScheduleDropCellId(value: string) {
+  const prefix = "schedule-cell:";
+  if (!value.startsWith(prefix)) {
+    return null;
+  }
+
+  const rawValue = value.slice(prefix.length);
+  const separatorIndex = rawValue.indexOf(":");
+  if (separatorIndex === -1) {
+    return null;
+  }
+
+  const dayOfWeek = rawValue.slice(0, separatorIndex);
+  const startTime = rawValue.slice(separatorIndex + 1);
+  if (!dayOfWeek || !startTime) {
+    return null;
+  }
+
+  return { dayOfWeek, startTime };
 }
 
 function getBuildingScheduleLabel(buildingId: string) {
@@ -133,6 +205,20 @@ function getBuildingScheduleLabel(buildingId: string) {
 
 function normalizeScheduleRoom(value: string) {
   return value.toLowerCase().replace(/[^a-z0-9]/g, "");
+}
+
+function formatScheduleLocationLabel(buildingId: string, room: string) {
+  const buildingLabel = getBuildingScheduleLabel(buildingId).replace(/\s+/g, "");
+  const compactRoom = room.replace(/\s+/g, "");
+
+  if (!compactRoom) {
+    return buildingLabel;
+  }
+
+  const normalizedBuildingLabel = buildingLabel.toLowerCase();
+  const normalizedRoom = compactRoom.toLowerCase();
+
+  return normalizedRoom.startsWith(normalizedBuildingLabel) ? compactRoom.toUpperCase() : `${buildingLabel}${compactRoom}`.toUpperCase();
 }
 
 function getScheduleRouteTarget(buildingId: string, room: string) {
@@ -189,25 +275,6 @@ function parseScheduleDayInput(value: string) {
   return null;
 }
 
-function parseScheduleSlotInput(value: string) {
-  const normalizedValue = value.trim().toLowerCase().replace(/\s+/g, " ");
-  const directSlot = SCHEDULE_SLOTS.find((slot) => slot.key === normalizedValue);
-
-  if (directSlot) {
-    return directSlot.key;
-  }
-
-  const matchingSlot = SCHEDULE_SLOTS.find((slot) => {
-    return (
-      slot.startLabel.toLowerCase() === normalizedValue ||
-      `${slot.startLabel.toLowerCase()} - ${slot.endLabel.toLowerCase()}` === normalizedValue ||
-      `${slot.startLabel.toLowerCase()}–${slot.endLabel.toLowerCase()}` === normalizedValue
-    );
-  });
-
-  return matchingSlot?.key ?? null;
-}
-
 function resolveScheduleBuildingId(value: string) {
   const normalizedValue = value.trim().toLowerCase();
 
@@ -229,27 +296,33 @@ function parseBulkScheduleText(input: string) {
     .split(/\r?\n/)
     .map((line) => line.trim())
     .filter(Boolean);
-  const seenCells = new Set<string>();
 
   const entries = lines.map((line, index) => {
     const separator = line.includes("|") ? "|" : ",";
     const parts = line.split(separator).map((part) => part.trim());
 
     if (parts.length < 5) {
-      throw new Error(`Line ${index + 1} must have 5 values: day | time | course | room | building.`);
+      throw new Error(`Line ${index + 1} must have 5 or 6 values: day | start time | end time | course | room | building.`);
     }
 
-    const [dayInput, slotInput, course, room, buildingInput] = parts;
+    const isLegacyLine = parts.length === 5;
+    const [dayInput, firstTimeInput, secondTimeInput, courseInput, roomInput, buildingInput] = isLegacyLine
+      ? [parts[0], parts[1], "", parts[2], parts[3], parts[4]]
+      : [parts[0], parts[1], parts[2], parts[3], parts[4], parts[5]];
     const dayOfWeek = parseScheduleDayInput(dayInput);
-    const slotKey = parseScheduleSlotInput(slotInput);
+    const legacySlot = isLegacyLine ? parseLegacyScheduleSlotInput(firstTimeInput) : null;
+    const startTime = legacySlot?.startTime ?? parseScheduleTimeInput(firstTimeInput);
+    const endTime = legacySlot?.endTime ?? parseScheduleTimeInput(secondTimeInput);
     const buildingId = resolveScheduleBuildingId(buildingInput);
+    const course = courseInput;
+    const room = roomInput;
 
     if (!dayOfWeek) {
       throw new Error(`Line ${index + 1} has an invalid day: ${dayInput}.`);
     }
 
-    if (!slotKey) {
-      throw new Error(`Line ${index + 1} has an invalid time slot: ${slotInput}.`);
+    if (!startTime || !endTime || !isScheduleRangeValid(startTime, endTime)) {
+      throw new Error(`Line ${index + 1} has an invalid time range.`);
     }
 
     if (!buildingId) {
@@ -260,19 +333,13 @@ function parseBulkScheduleText(input: string) {
       throw new Error(`Line ${index + 1} must include both course and room.`);
     }
 
-    const cellKey = getScheduleCellKey(dayOfWeek, slotKey);
-    if (seenCells.has(cellKey)) {
-      throw new Error(`Line ${index + 1} duplicates another imported class in the same day and time slot.`);
-    }
-
-    seenCells.add(cellKey);
-
     return {
       course,
       room,
       buildingId,
       dayOfWeek,
-      slotKey,
+      startTime,
+      endTime,
     };
   });
 
@@ -314,6 +381,99 @@ function getScheduleEntryAppearance(buildingId: string) {
   };
 }
 
+function ScheduleDropCell({ cellId, dayLabel, timeLabel, isMobile = false, children }: ScheduleDropCellProps) {
+  const { isOver, setNodeRef } = useDroppable({ id: cellId });
+
+  return (
+    <div
+      ref={setNodeRef}
+      className={`group rounded-[18px] border p-1.5 transition-all ${isOver ? "border-primary/60 bg-primary/10 shadow-[0_0_0_1px_rgba(0,103,71,0.18),inset_0_0_0_1px_rgba(0,103,71,0.14)]" : "border-outline-variant/12 bg-surface-container-lowest/45"} ${isMobile ? "min-h-[88px]" : "min-h-[96px]"}`}
+      aria-label={`Drop a class on ${dayLabel} at ${timeLabel}`}
+    >
+      {isOver ? (
+        <div className="mb-1.5 flex items-center justify-between rounded-[12px] border border-primary/20 bg-primary/12 px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.16em] text-primary">
+          <span>Move Here</span>
+          <span>{dayLabel} {timeLabel}</span>
+        </div>
+      ) : null}
+      {children}
+    </div>
+  );
+}
+
+function ScheduleCard({ entry, appearance, routeTarget, isConflict, isDragging = false, onEdit, compact = false }: ScheduleCardProps) {
+  const { attributes, listeners, setActivatorNodeRef, setNodeRef, transform } = useDraggable({
+    id: getScheduleDragId(entry.id),
+  });
+  const style = transform ? { transform: CSS.Translate.toString(transform) } : undefined;
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={style}
+      className={`relative rounded-[16px] border shadow-[0_8px_18px_rgb(0,0,0,0.03)] transition-all ${compact ? "p-2.5" : "p-3.5"} ${appearance.cardClassName} ${isConflict ? "border-amber-400/70 bg-amber-500/12" : "border-outline-variant/14 dark:border-white/8 dark:bg-white/[0.045]"} ${isDragging ? "z-20 shadow-[0_18px_34px_rgba(0,0,0,0.16)] ring-2 ring-primary/20" : ""}`}
+    >
+      <span className={`absolute right-0 top-0 h-0 w-0 border-l-[12px] border-l-transparent border-t-[12px] ${isConflict ? "border-t-amber-400" : appearance.cornerClassName} opacity-80`} />
+      <div className={`flex items-start justify-between ${compact ? "gap-2" : "gap-3"}`}>
+        <button
+          type="button"
+          ref={setActivatorNodeRef}
+          {...listeners}
+          {...attributes}
+          className="min-w-0 flex-1 grow cursor-grab text-left active:cursor-grabbing"
+          title="Drag to move this class"
+        >
+          <div className={`flex items-start ${compact ? "gap-2" : "gap-2.5"}`}>
+            <span className={`mt-0.5 inline-flex shrink-0 items-center justify-center rounded-full border border-outline-variant/25 bg-surface-container-high text-on-surface-variant/80 ${compact ? "h-5 w-5" : "h-6 w-6"}`}>
+              <GripVertical className={compact ? "h-3 w-3" : "h-3.5 w-3.5"} />
+            </span>
+            <div className={`min-w-0 flex-1 grow ${compact ? "space-y-1.5" : "space-y-2"}`}>
+              <div>
+                <p className={`font-headline font-bold tracking-[-0.01em] text-on-surface leading-tight ${compact ? "text-[13px]" : "text-[15px]"}`}>{entry.course}</p>
+              </div>
+              <div className="space-y-1.5">
+                <p className={`font-semibold uppercase tracking-[0.08em] leading-snug text-on-surface-variant ${compact ? "text-[10px]" : "text-[11px]"}`}>
+                  {formatScheduleLocationLabel(entry.buildingId, entry.room)}
+                </p>
+                <p className={`whitespace-nowrap font-bold leading-none text-primary dark:text-primary ${compact ? "text-[11px]" : "text-[12px]"}`}>
+                  {formatScheduleTimeLabel(entry.startTime)} - {formatScheduleTimeLabel(entry.endTime)}
+                </p>
+              </div>
+            </div>
+          </div>
+        </button>
+        <div className={`flex items-center shrink-0 ${compact ? "gap-1" : "gap-1"}`}>
+          <Link
+            to={routeTarget.to}
+            title={routeTarget.label}
+            className={`inline-flex items-center justify-center rounded-full transition-colors ${compact ? "h-7 w-7" : "h-7.5 w-7.5"} ${appearance.actionClassName}`}
+          >
+            <Navigation className={compact ? "h-3.5 w-3.5" : "h-4 w-4"} />
+          </Link>
+          <button
+            type="button"
+            onClick={() => onEdit(entry)}
+            className={`inline-flex items-center justify-center rounded-full bg-surface-container-high text-primary transition-colors hover:bg-surface-container-highest ${compact ? "h-7 w-7" : "h-7.5 w-7.5"}`}
+            title="Edit class"
+          >
+            <PencilLine className={compact ? "h-3.5 w-3.5" : "h-4 w-4"} />
+          </button>
+        </div>
+      </div>
+      <div className={`flex flex-wrap items-center justify-between gap-2 border-t border-outline-variant/10 dark:border-white/6 ${compact ? "mt-2.5 pt-2" : "mt-3 pt-2.5"}`}>
+        <span className={`inline-flex items-center rounded-full border font-bold uppercase tracking-[0.16em] shadow-[inset_0_1px_0_rgba(255,255,255,0.08)] ${compact ? "px-2.5 py-1 text-[8px]" : "px-2.5 py-1 text-[9px]"} ${isConflict ? "border-amber-400/40 bg-amber-500/15 text-amber-700 dark:text-amber-300" : appearance.badgeClassName}`}>
+          {isConflict ? "Conflict" : appearance.label}
+        </span>
+        {isConflict ? (
+          <span className={`inline-flex items-center gap-1 font-semibold text-amber-700 dark:text-amber-300 ${compact ? "text-[9px]" : "text-[10px]"}`}>
+            <AlertTriangle className="h-3 w-3" /> Overlaps another class
+          </span>
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
 export default function Dashboard() {
   const { getToken, isLoaded: isAuthLoaded, isSignedIn } = useAuth();
   const navigate = useNavigate();
@@ -335,6 +495,8 @@ export default function Dashboard() {
   const [editingScheduleEntryId, setEditingScheduleEntryId] = useState<string | null>(null);
   const [isScheduleModalOpen, setIsScheduleModalOpen] = useState(false);
   const [isBulkScheduleModalOpen, setIsBulkScheduleModalOpen] = useState(false);
+  const [scheduleWarningMessage, setScheduleWarningMessage] = useState<string | null>(null);
+  const [activeDragEntryId, setActiveDragEntryId] = useState<string | null>(null);
   const [bulkScheduleText, setBulkScheduleText] = useState("");
   const [bulkScheduleError, setBulkScheduleError] = useState<string | null>(null);
   const [selectedMobileScheduleDay, setSelectedMobileScheduleDay] = useState<ScheduleDay>("mon");
@@ -480,6 +642,7 @@ export default function Dashboard() {
       setScheduleEntries([]);
       setScheduleLoadError(null);
       setScheduleMutationError(null);
+      setScheduleWarningMessage(null);
       setIsLoadingSchedule(false);
       setIsScheduleModalOpen(false);
       return;
@@ -499,6 +662,7 @@ export default function Dashboard() {
         const entries = await fetchScheduleEntries(token);
         if (!isCancelled) {
           setScheduleEntries(entries);
+          setScheduleWarningMessage(getScheduleConflictIds(entries).size > 0 ? "Some classes overlap. Conflicts are highlighted in the planner." : null);
           setScheduleLoadError(null);
         }
       } catch (error) {
@@ -529,8 +693,34 @@ export default function Dashboard() {
   }, [isScheduleCollapsed]);
 
   const scheduleEntriesByCell = useMemo(() => {
-    return new Map(scheduleEntries.map((entry) => [getScheduleCellKey(entry.dayOfWeek, entry.slotKey), entry]));
+    const entryMap = new Map<string, ScheduleEntryRecord[]>();
+
+    for (const entry of scheduleEntries) {
+      const displayStartTime = getScheduleDisplayRowStart(entry.startTime) ?? entry.startTime;
+      const cellKey = getScheduleCellKey(entry.dayOfWeek, displayStartTime);
+      const existingEntries = entryMap.get(cellKey) ?? [];
+      existingEntries.push(entry);
+      entryMap.set(cellKey, existingEntries.sort((left, right) => compareScheduleTimes(left.endTime, right.endTime)));
+    }
+
+    return entryMap;
   }, [scheduleEntries]);
+
+  const scheduleConflictIds = useMemo(() => getScheduleConflictIds(scheduleEntries), [scheduleEntries]);
+
+  const visibleScheduleRows = useMemo(() => buildScheduleVisibleTimeRows(scheduleEntries), [scheduleEntries]);
+
+  const scheduleTimeOptions = useMemo(() => buildScheduleTimeOptions(scheduleEntries), [scheduleEntries]);
+
+  const activeDraggedEntry = useMemo(
+    () => scheduleEntries.find((entry) => entry.id === activeDragEntryId) ?? null,
+    [activeDragEntryId, scheduleEntries]
+  );
+
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 2 } }),
+    useSensor(TouchSensor, { activationConstraint: { delay: 150, tolerance: 8 } })
+  );
 
   const topShuttleRoutes = useMemo(() => {
     return [...(shuttleOverview?.routes ?? [])]
@@ -548,17 +738,57 @@ export default function Dashboard() {
     return getScheduleEntryAppearance(scheduleForm.buildingId);
   }, [scheduleForm.buildingId]);
 
+  const scheduleFormTimeError = useMemo(() => {
+    const normalizedStartTime = parseScheduleTimeInput(scheduleForm.startTime);
+    const normalizedEndTime = parseScheduleTimeInput(scheduleForm.endTime);
+
+    if (!normalizedStartTime || !normalizedEndTime) {
+      return "Use a valid start and end time.";
+    }
+
+    if (!isScheduleRangeValid(normalizedStartTime, normalizedEndTime)) {
+      return "End time must be after start time.";
+    }
+
+    return null;
+  }, [scheduleForm.endTime, scheduleForm.startTime]);
+
+  const scheduleFormHasConflict = useMemo(() => {
+    const normalizedStartTime = parseScheduleTimeInput(scheduleForm.startTime);
+    const normalizedEndTime = parseScheduleTimeInput(scheduleForm.endTime);
+    if (!normalizedStartTime || !normalizedEndTime || !isScheduleRangeValid(normalizedStartTime, normalizedEndTime)) {
+      return false;
+    }
+
+    return getScheduleConflictIds([
+      ...scheduleEntries.filter((entry) => entry.id !== editingScheduleEntryId),
+      {
+        id: editingScheduleEntryId ?? "draft-entry",
+        userId: "draft",
+        course: scheduleForm.course,
+        room: scheduleForm.room,
+        buildingId: scheduleForm.buildingId,
+        dayOfWeek: scheduleForm.dayOfWeek,
+        startTime: normalizedStartTime,
+        endTime: normalizedEndTime,
+        createdAt: "",
+        updatedAt: "",
+      },
+    ]).has(editingScheduleEntryId ?? "draft-entry");
+  }, [editingScheduleEntryId, scheduleEntries, scheduleForm.buildingId, scheduleForm.course, scheduleForm.dayOfWeek, scheduleForm.endTime, scheduleForm.room, scheduleForm.startTime]);
+
   const sortedScheduleEntries = useMemo(() => {
     const dayOrder = new Map(SCHEDULE_DAYS.map((day, index) => [day.key, index]));
-    const slotOrder = new Map(SCHEDULE_SLOTS.map((slot, index) => [slot.key, index]));
 
     return [...scheduleEntries].sort((left, right) => {
-      const dayDelta = (dayOrder.get(left.dayOfWeek) ?? 99) - (dayOrder.get(right.dayOfWeek) ?? 99);
+      const leftDayOrder = isScheduleDay(left.dayOfWeek) ? (dayOrder.get(left.dayOfWeek) ?? 99) : 99;
+      const rightDayOrder = isScheduleDay(right.dayOfWeek) ? (dayOrder.get(right.dayOfWeek) ?? 99) : 99;
+      const dayDelta = leftDayOrder - rightDayOrder;
       if (dayDelta !== 0) {
         return dayDelta;
       }
 
-      return (slotOrder.get(left.slotKey) ?? 99) - (slotOrder.get(right.slotKey) ?? 99);
+      return compareScheduleTimes(left.startTime, right.startTime) || compareScheduleTimes(left.endTime, right.endTime);
     });
   }, [scheduleEntries]);
 
@@ -608,9 +838,9 @@ export default function Dashboard() {
     setBulkScheduleError(null);
   };
 
-  const openCreateScheduleModal = (dayOfWeek: ScheduleDay, slotKey: ScheduleSlotKey) => {
+  const openCreateScheduleModal = (dayOfWeek: ScheduleDay, startTime: string = DEFAULT_SCHEDULE_START_TIME) => {
     setEditingScheduleEntryId(null);
-    setScheduleForm(createDefaultScheduleForm(dayOfWeek, slotKey));
+    setScheduleForm(createDefaultScheduleForm(dayOfWeek, startTime));
     setScheduleMutationError(null);
     setIsScheduleModalOpen(true);
   };
@@ -622,7 +852,8 @@ export default function Dashboard() {
       room: entry.room,
       buildingId: entry.buildingId,
       dayOfWeek: entry.dayOfWeek as ScheduleDay,
-      slotKey: entry.slotKey as ScheduleSlotKey,
+      startTime: entry.startTime,
+      endTime: entry.endTime,
     });
     setScheduleMutationError(null);
     setIsScheduleModalOpen(true);
@@ -631,7 +862,17 @@ export default function Dashboard() {
   const handleScheduleFieldChange = <K extends keyof ScheduleFormState>(field: K, value: ScheduleFormState[K]) => {
     setScheduleForm((current) => ({
       ...current,
-      [field]: value,
+      ...(field === "startTime"
+        ? (() => {
+            const nextStartTime = parseScheduleTimeInput(String(value)) ?? String(value);
+            const shiftedRange = getShiftedScheduleRange(current.startTime, current.endTime, nextStartTime);
+
+            return {
+              startTime: String(value),
+              endTime: shiftedRange?.endTime ?? current.endTime,
+            };
+          })()
+        : { [field]: value }),
     }));
   };
 
@@ -640,6 +881,13 @@ export default function Dashboard() {
 
     if (!isSignedIn) {
       setScheduleMutationError("Sign in to manage your schedule.");
+      return;
+    }
+
+    const normalizedStartTime = parseScheduleTimeInput(scheduleForm.startTime);
+    const normalizedEndTime = parseScheduleTimeInput(scheduleForm.endTime);
+    if (!normalizedStartTime || !normalizedEndTime || !isScheduleRangeValid(normalizedStartTime, normalizedEndTime)) {
+      setScheduleMutationError("Enter a valid start and end time.");
       return;
     }
 
@@ -657,7 +905,8 @@ export default function Dashboard() {
         room: scheduleForm.room.trim(),
         buildingId: scheduleForm.buildingId,
         dayOfWeek: scheduleForm.dayOfWeek,
-        slotKey: scheduleForm.slotKey,
+        startTime: normalizedStartTime,
+        endTime: normalizedEndTime,
       };
 
       const entry = editingScheduleEntryId
@@ -665,9 +914,11 @@ export default function Dashboard() {
         : await createScheduleEntry(token, payload);
 
       setScheduleEntries((current) => {
-        const nextEntries = current.filter((item) => item.id !== entry.id && getScheduleCellKey(item.dayOfWeek, item.slotKey) !== getScheduleCellKey(entry.dayOfWeek, entry.slotKey));
+        const nextEntries = current.filter((item) => item.id !== entry.id);
         return [...nextEntries, entry];
       });
+      const nextEntries = [...scheduleEntries.filter((item) => item.id !== entry.id), entry];
+      setScheduleWarningMessage(getScheduleConflictIds(nextEntries).has(entry.id) ? "This class overlaps another one in your schedule." : null);
       setScheduleLoadError(null);
       closeScheduleModal();
     } catch (error) {
@@ -721,12 +972,11 @@ export default function Dashboard() {
 
       const parsedEntries = parseBulkScheduleText(bulkScheduleText);
       const importedEntries = await bulkUpsertScheduleEntries(token, { entries: parsedEntries });
-      const importedCellKeys = new Set(importedEntries.map((entry) => getScheduleCellKey(entry.dayOfWeek, entry.slotKey)));
 
       setScheduleEntries((current) => {
-        const remainingEntries = current.filter((entry) => !importedCellKeys.has(getScheduleCellKey(entry.dayOfWeek, entry.slotKey)));
-        return [...remainingEntries, ...importedEntries];
+        return [...current, ...importedEntries];
       });
+      setScheduleWarningMessage(importedEntries.length > 0 ? "Imported classes were added. Any overlaps are highlighted in the planner." : null);
       setScheduleLoadError(null);
       setBulkScheduleText("");
       setIsBulkScheduleModalOpen(false);
@@ -743,16 +993,15 @@ export default function Dashboard() {
     }
 
     const rows = [
-      ["Day", "Time", "End Time", "Course", "Room", "Building Code", "Building Name"],
+      ["Day", "Start Time", "End Time", "Course", "Room", "Building Code", "Building Name"],
       ...sortedScheduleEntries.map((entry) => {
         const dayLabel = SCHEDULE_DAYS.find((day) => day.key === entry.dayOfWeek)?.label ?? entry.dayOfWeek;
-        const slot = SCHEDULE_SLOTS.find((item) => item.key === entry.slotKey);
         const building = BUILDINGS.find((item) => item.id === entry.buildingId);
 
         return [
           dayLabel,
-          slot?.startLabel ?? entry.slotKey,
-          slot?.endLabel ?? "",
+          formatScheduleTimeLabel(entry.startTime),
+          formatScheduleTimeLabel(entry.endTime),
           entry.course,
           entry.room,
           getBuildingScheduleLabel(entry.buildingId),
@@ -774,6 +1023,70 @@ export default function Dashboard() {
     link.click();
     document.body.removeChild(link);
     URL.revokeObjectURL(url);
+  };
+
+  const handleScheduleDragStart = (event: DragStartEvent) => {
+    const activeId = String(event.active.id);
+    if (!activeId.startsWith("schedule-entry:")) {
+      return;
+    }
+
+    setActiveDragEntryId(activeId.replace("schedule-entry:", ""));
+  };
+
+  const handleScheduleDrop = async (event: DragEndEvent) => {
+    setActiveDragEntryId(null);
+
+    const activeId = String(event.active.id);
+    const overId = event.over ? String(event.over.id) : "";
+    if (!activeId.startsWith("schedule-entry:") || !overId) {
+      return;
+    }
+
+    const entryId = activeId.replace("schedule-entry:", "");
+    const draggedEntry = scheduleEntries.find((entry) => entry.id === entryId);
+    const dropCell = parseScheduleDropCellId(overId);
+    if (!draggedEntry || !dropCell || !isScheduleDay(dropCell.dayOfWeek)) {
+      return;
+    }
+
+    const shiftedRange = getShiftedScheduleRange(draggedEntry.startTime, draggedEntry.endTime, dropCell.startTime);
+    if (!shiftedRange) {
+      return;
+    }
+
+    const nextEntry = {
+      ...draggedEntry,
+      dayOfWeek: dropCell.dayOfWeek,
+      startTime: shiftedRange.startTime,
+      endTime: shiftedRange.endTime,
+    };
+
+    const optimisticEntries = scheduleEntries.map((entry) => (entry.id === entryId ? nextEntry : entry));
+    setScheduleEntries(optimisticEntries);
+    setScheduleWarningMessage(getScheduleConflictIds(optimisticEntries).has(entryId) ? "Class moved, but it now overlaps another class." : null);
+
+    try {
+      const token = await getToken();
+      if (!token) {
+        throw new Error("Unable to update your schedule right now.");
+      }
+
+      const savedEntry = await updateScheduleEntry(token, entryId, {
+        course: nextEntry.course,
+        room: nextEntry.room,
+        buildingId: nextEntry.buildingId,
+        dayOfWeek: nextEntry.dayOfWeek,
+        startTime: nextEntry.startTime,
+        endTime: nextEntry.endTime,
+      });
+
+      setScheduleEntries((current) => current.map((entry) => (entry.id === entryId ? savedEntry : entry)));
+      setScheduleLoadError(null);
+    } catch (error) {
+      setScheduleEntries((current) => current.map((entry) => (entry.id === entryId ? draggedEntry : entry)));
+      setScheduleMutationError(error instanceof Error ? error.message : "Unable to update your schedule right now.");
+    }
   };
 
   return (
@@ -955,171 +1268,167 @@ export default function Dashboard() {
           ) : scheduleLoadError ? (
             <div className="px-4 py-7 text-center text-on-surface-variant md:px-6 md:py-8">{scheduleLoadError}</div>
           ) : (
-            <>
-              <div className="px-3 py-4 md:hidden">
-                <div className="flex gap-2 overflow-x-auto pb-2">
-                  {SCHEDULE_DAYS.map((day) => (
-                    <button
-                      key={day.key}
-                      onClick={() => setSelectedMobileScheduleDay(day.key)}
-                      className={`shrink-0 rounded-full px-3 py-2 text-xs font-bold uppercase tracking-[0.18em] transition-colors ${selectedMobileScheduleDay === day.key ? "bg-primary text-on-primary" : "bg-surface-container text-on-surface-variant hover:bg-surface-container-high"}`}
-                    >
-                      {day.label}
-                    </button>
-                  ))}
-                </div>
+            <DndContext sensors={sensors} collisionDetection={closestCenter} onDragStart={handleScheduleDragStart} onDragEnd={(event) => { void handleScheduleDrop(event); }}>
+              <>
+                {scheduleWarningMessage ? (
+                  <div className="mx-4 mt-4 rounded-2xl border border-amber-400/25 bg-amber-500/10 px-4 py-3 text-sm text-amber-800 dark:text-amber-200 md:mx-5">
+                    <div className="flex items-start gap-2">
+                      <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+                      <span>{scheduleWarningMessage}</span>
+                    </div>
+                  </div>
+                ) : null}
 
-                <div className="mt-4 space-y-2.5">
-                  {SCHEDULE_SLOTS.map((slot) => {
-                    const entry = scheduleEntriesByCell.get(getScheduleCellKey(selectedMobileScheduleDay, slot.key));
-                    const routeTarget = entry ? getScheduleRouteTarget(entry.buildingId, entry.room) : null;
-                    const appearance = entry ? getScheduleEntryAppearance(entry.buildingId) : null;
+                <div className="px-3 py-4 md:hidden">
+                  <div className="flex gap-2 overflow-x-auto pb-2">
+                    {SCHEDULE_DAYS.map((day) => (
+                      <button
+                        key={day.key}
+                        onClick={() => setSelectedMobileScheduleDay(day.key)}
+                        className={`shrink-0 rounded-full px-3 py-2 text-xs font-bold uppercase tracking-[0.18em] transition-colors ${selectedMobileScheduleDay === day.key ? "bg-primary text-on-primary" : "bg-surface-container text-on-surface-variant hover:bg-surface-container-high"}`}
+                      >
+                        {day.label}
+                      </button>
+                    ))}
+                  </div>
 
-                    return (
-                      <div key={`${selectedMobileScheduleDay}-${slot.key}`} className="rounded-[18px] border border-outline-variant/20 bg-surface-container-lowest/80 p-2.5">
-                        <div className="flex items-start gap-3">
-                          <div className="w-[76px] shrink-0 pt-1">
-                            <p className="font-headline text-[13px] font-bold text-on-surface leading-none">{slot.startLabel}</p>
-                            <p className="text-[10px] text-primary mt-1 font-semibold">{slot.endLabel}</p>
-                          </div>
+                  <div className="mt-4 space-y-2.5">
+                    {visibleScheduleRows.map((time) => {
+                      const entries = scheduleEntriesByCell.get(getScheduleCellKey(selectedMobileScheduleDay, time)) ?? [];
+                      return (
+                        <div key={`${selectedMobileScheduleDay}-${time}`} className="rounded-[18px] border border-outline-variant/16 bg-surface-container-lowest/70 p-2">
+                          <div className="flex items-start gap-3">
+                            <button
+                              type="button"
+                              onClick={() => openCreateScheduleModal(selectedMobileScheduleDay, time)}
+                              className="w-[92px] shrink-0 rounded-2xl border border-dashed border-outline/24 bg-surface-container-low/55 px-3 py-2.5 text-left transition-colors hover:bg-surface-container"
+                            >
+                              <p className="font-headline text-[12px] font-bold leading-tight text-on-surface">{formatScheduleTimeLabel(time)}</p>
+                              <p className="mt-1 text-[10px] font-semibold text-primary/85">to {formatScheduleTimeLabel(scheduleMinutesToTime((scheduleTimeToMinutes(time) ?? 0) + 60))}</p>
+                            </button>
 
-                          <div className="flex-1">
-                            {entry ? (
-                              <div className={`rounded-[16px] border p-2.5 ${appearance?.cardClassName ?? "border-primary/15 bg-primary/8"}`}>
-                                <div className="flex items-start justify-between gap-2">
-                                  <div>
-                                    <p className="font-headline text-sm font-bold text-on-surface leading-tight">{entry.course}</p>
-                                    <p className="text-xs text-on-surface-variant mt-1">{entry.room} • {getBuildingScheduleLabel(entry.buildingId)}</p>
-                                  </div>
-                                  <div className="flex items-center gap-1.5 shrink-0">
-                                    <Link
-                                      to={routeTarget?.to ?? "/map"}
-                                      className={`inline-flex h-8 w-8 items-center justify-center rounded-full transition-colors ${appearance?.actionClassName ?? "bg-primary text-on-primary hover:brightness-110"}`}
-                                      title={routeTarget?.label ?? "Open map"}
-                                    >
-                                      <Navigation className="w-4 h-4" />
-                                    </Link>
-                                    <button
-                                      type="button"
-                                      onClick={() => openEditScheduleModal(entry)}
-                                      className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-surface-container-high text-primary hover:bg-surface-container-highest transition-colors"
-                                      title="Edit class"
-                                    >
-                                      <PencilLine className="w-4 h-4" />
-                                    </button>
-                                  </div>
+                            <ScheduleDropCell
+                              cellId={getScheduleDropCellId(selectedMobileScheduleDay, time)}
+                              dayLabel={SCHEDULE_DAYS.find((day) => day.key === selectedMobileScheduleDay)?.label ?? selectedMobileScheduleDay}
+                              timeLabel={formatScheduleTimeLabel(time)}
+                              isMobile
+                            >
+                              {entries.length > 0 ? (
+                                <div className="space-y-2">
+                                  {entries.map((entry) => (
+                                    <ScheduleCard
+                                      key={entry.id}
+                                      entry={entry}
+                                      appearance={getScheduleEntryAppearance(entry.buildingId)}
+                                      routeTarget={getScheduleRouteTarget(entry.buildingId, entry.room)}
+                                      isConflict={scheduleConflictIds.has(entry.id)}
+                                      isDragging={activeDragEntryId === entry.id}
+                                      onEdit={openEditScheduleModal}
+                                      compact
+                                    />
+                                  ))}
                                 </div>
-                              </div>
-                            ) : (
-                              <button
-                                type="button"
-                                onClick={() => openCreateScheduleModal(selectedMobileScheduleDay, slot.key)}
-                                className="flex min-h-[54px] w-full items-center justify-center rounded-[16px] border border-dashed border-outline/50 bg-surface-container-low text-primary/80 hover:bg-surface-container transition-colors"
-                              >
-                                <Plus className="w-4 h-4" />
-                              </button>
-                            )}
+                              ) : (
+                                <button
+                                  type="button"
+                                  onClick={() => openCreateScheduleModal(selectedMobileScheduleDay, time)}
+                                  className="flex min-h-[56px] w-full items-center justify-center rounded-[14px] border border-dashed border-outline/18 bg-transparent px-3 text-on-surface-variant/45 transition-all hover:border-outline/28 hover:bg-surface-container-low/40 hover:text-primary/75"
+                                >
+                                  <div className="flex items-center gap-2 opacity-70 transition-opacity group-hover:opacity-100">
+                                    <Plus className="h-4 w-4" />
+                                    <span className="text-[10px] font-semibold uppercase tracking-[0.16em]">Add</span>
+                                  </div>
+                                </button>
+                              )}
+                            </ScheduleDropCell>
                           </div>
                         </div>
-                      </div>
-                    );
-                  })}
+                      );
+                    })}
+                  </div>
                 </div>
-              </div>
 
-              <div className="hidden md:block overflow-x-auto px-2 pb-3 md:px-3 md:pb-4">
-              <table className="min-w-[860px] w-full table-fixed border-separate border-spacing-0">
-                <colgroup>
-                  <col className="w-[88px]" />
-                  <col className="w-[154px]" />
-                  <col className="w-[154px]" />
-                  <col className="w-[154px]" />
-                  <col className="w-[154px]" />
-                  <col className="w-[154px]" />
-                </colgroup>
-                <thead>
-                  <tr className="bg-primary text-on-primary">
-                    <th className="w-28 px-3 py-3 text-left text-[10px] font-bold tracking-[0.22em] uppercase border-r border-white/10 rounded-tl-[20px]">Time</th>
-                    {SCHEDULE_DAYS.map((day) => (
-                      <th key={day.key} className={`px-3 py-3 text-left text-[10px] font-bold tracking-[0.22em] uppercase border-r border-white/10 last:border-r-0 ${day.key === "fri" ? "rounded-tr-[20px]" : ""}`}>
-                        {day.label}
-                      </th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {SCHEDULE_SLOTS.map((slot) => (
-                    <tr key={slot.key}>
-                      <td className="w-28 px-3 py-3 align-top border-r border-b border-outline-variant/18 bg-surface-container-low">
-                        <p className="font-headline text-sm font-bold text-on-surface leading-none">{slot.startLabel}</p>
-                        <p className="text-[10px] text-primary mt-1 font-semibold tracking-wide">{slot.endLabel}</p>
-                      </td>
-                      {SCHEDULE_DAYS.map((day) => {
-                        const entry = scheduleEntriesByCell.get(getScheduleCellKey(day.key, slot.key));
-                        const routeTarget = entry ? getScheduleRouteTarget(entry.buildingId, entry.room) : null;
-                        const appearance = entry ? getScheduleEntryAppearance(entry.buildingId) : null;
-
-                        return (
-                          <td key={day.key} className="border-r border-b border-outline-variant/18 last:border-r-0 bg-surface-container-lowest/70 align-top p-1.5 lg:p-2">
-                            {entry ? (
-                              <div className="relative flex min-h-[74px] w-full flex-col items-start justify-between rounded-[18px] bg-surface-container-low p-2 text-left transition-all hover:-translate-y-0.5 hover:shadow-[0_10px_18px_rgb(0,0,0,0.04)]">
-                                <span className={`absolute right-0 top-0 h-0 w-0 border-l-[12px] border-l-transparent border-t-[12px] ${appearance?.cornerClassName ?? "border-t-primary"} opacity-80`} />
-                                <div className={`rounded-[14px] border p-2 w-full shadow-[0_8px_18px_rgb(0,0,0,0.03)] ${appearance?.cardClassName ?? "border-primary/15 bg-primary/8"}`}>
-                                  <div className="flex items-start justify-between gap-3">
-                                    <div>
-                                      <p className="font-headline text-[13px] font-bold text-on-surface leading-tight line-clamp-1">{entry.course}</p>
-                                      <p className="text-[11px] text-on-surface-variant mt-1">{entry.room}</p>
-                                    </div>
-                                    <div className="flex items-center gap-1.5 shrink-0">
-                                      <Link
-                                        to={routeTarget?.to ?? "/map"}
-                                        title={routeTarget?.label ?? "Open map"}
-                                        className={`inline-flex h-7 w-7 items-center justify-center rounded-full transition-colors ${appearance?.actionClassName ?? "bg-primary text-on-primary hover:brightness-110"}`}
-                                      >
-                                        <Navigation className="w-3.5 h-3.5" />
-                                      </Link>
-                                      <button
-                                        type="button"
-                                        onClick={() => openEditScheduleModal(entry)}
-                                        className="inline-flex h-7 w-7 items-center justify-center rounded-full bg-surface-container-high text-primary hover:bg-surface-container-highest transition-colors"
-                                        title="Edit class"
-                                      >
-                                        <PencilLine className="w-3.5 h-3.5" />
-                                      </button>
-                                    </div>
-                                  </div>
-                                  <div className="mt-2.5 flex items-center justify-between gap-2 flex-wrap">
-                                    <p className={`text-[10px] uppercase tracking-[0.16em] font-bold ${appearance?.helperTextClassName ?? "text-primary"}`}>
-                                      {getBuildingScheduleLabel(entry.buildingId)}
-                                    </p>
-                                    <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.14em] ${appearance?.badgeClassName ?? "bg-primary/12 text-primary border-primary/15"}`}>
-                                      {appearance?.label ?? "Academic"}
-                                    </span>
-                                  </div>
-                                </div>
-                              </div>
-                            ) : (
-                              <button
-                                onClick={() => {
-                                  openCreateScheduleModal(day.key, slot.key);
-                                }}
-                                className="relative flex min-h-[74px] w-full items-center justify-center rounded-[18px] bg-surface-container-low/60 p-2 text-left transition-all hover:bg-surface-container hover:-translate-y-0.5"
-                              >
-                                <span className="absolute right-0 top-0 h-0 w-0 border-l-[12px] border-l-transparent border-t-[12px] border-t-primary opacity-28" />
-                                <div className="rounded-[14px] border border-dashed border-outline/45 bg-surface-container-lowest/70 flex h-full min-h-[56px] w-full items-center justify-center shadow-[inset_0_1px_0_rgba(255,255,255,0.3)] dark:shadow-none">
-                                  <Plus className="w-3.5 h-3.5 text-primary/75" />
-                                </div>
-                              </button>
-                            )}
+                <div className="hidden overflow-x-auto px-3 pb-4 md:block">
+                  <table className="min-w-[920px] w-full table-fixed border-separate border-spacing-0">
+                    <colgroup>
+                      <col className="w-[132px]" />
+                      {SCHEDULE_DAYS.map((day) => (
+                        <col key={day.key} className="w-[170px]" />
+                      ))}
+                    </colgroup>
+                    <thead>
+                      <tr className="bg-primary text-on-primary">
+                        <th className="rounded-tl-[20px] border-r border-white/10 px-4 py-3 text-left text-[10px] font-bold uppercase tracking-[0.22em]">Time</th>
+                        {SCHEDULE_DAYS.map((day) => (
+                          <th key={day.key} className={`border-r border-white/10 px-4 py-3 text-left text-[10px] font-bold uppercase tracking-[0.22em] last:border-r-0 ${day.key === "fri" ? "rounded-tr-[20px]" : ""}`}>
+                            {day.label}
+                          </th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {visibleScheduleRows.map((time) => (
+                        <tr key={time}>
+                          <td className="border-r border-b border-outline-variant/18 bg-surface-container-low px-4 py-3.5 align-top">
+                            <button
+                              type="button"
+                              onClick={() => openCreateScheduleModal(DEFAULT_SCHEDULE_DAY, time)}
+                              className="w-full text-left"
+                            >
+                              <p className="font-headline text-[13px] font-bold leading-snug text-on-surface">
+                                {formatScheduleTimeLabel(time)} - {formatScheduleTimeLabel(scheduleMinutesToTime((scheduleTimeToMinutes(time) ?? 0) + 60))}
+                              </p>
+                              <p className="mt-1 text-[9px] font-semibold uppercase tracking-[0.16em] text-primary/75">1 hour window</p>
+                            </button>
                           </td>
-                        );
-                      })}
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-              </div>
-            </>
+                          {SCHEDULE_DAYS.map((day) => {
+                            const entries = scheduleEntriesByCell.get(getScheduleCellKey(day.key, time)) ?? [];
+                            return (
+                              <td key={`${day.key}-${time}`} className="border-r border-b border-outline-variant/18 bg-surface-container-lowest/70 p-1 align-top last:border-r-0 lg:p-1.5">
+                                <ScheduleDropCell
+                                  cellId={getScheduleDropCellId(day.key, time)}
+                                  dayLabel={day.label}
+                                  timeLabel={formatScheduleTimeLabel(time)}
+                                >
+                                  {entries.length > 0 ? (
+                                    <div className="space-y-2">
+                                      {entries.map((entry) => (
+                                        <ScheduleCard
+                                          key={entry.id}
+                                          entry={entry}
+                                        appearance={getScheduleEntryAppearance(entry.buildingId)}
+                                        routeTarget={getScheduleRouteTarget(entry.buildingId, entry.room)}
+                                        isConflict={scheduleConflictIds.has(entry.id)}
+                                        isDragging={activeDragEntryId === entry.id}
+                                        onEdit={openEditScheduleModal}
+                                        compact
+                                      />
+                                    ))}
+                                  </div>
+                                ) : (
+                                    <button
+                                      type="button"
+                                      onClick={() => openCreateScheduleModal(day.key, time)}
+                                      className="flex min-h-[62px] w-full items-center justify-center rounded-[14px] border border-dashed border-outline/18 bg-transparent px-3 text-on-surface-variant/45 transition-all hover:border-outline/28 hover:bg-surface-container-low/40 hover:text-primary/75"
+                                    >
+                                      <div className="flex items-center gap-2 opacity-70 transition-opacity group-hover:opacity-100">
+                                        <Plus className="h-4 w-4" />
+                                        <span className="text-[10px] font-semibold uppercase tracking-[0.16em]">Add</span>
+                                      </div>
+                                    </button>
+                                  )}
+                                </ScheduleDropCell>
+                              </td>
+                            );
+                          })}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+
+              </>
+            </DndContext>
           )}
         </div>
       </section>
@@ -1247,7 +1556,7 @@ export default function Dashboard() {
                 <h3 className="font-headline text-3xl font-bold text-primary tracking-tight">
                   {editingScheduleEntryId ? "Edit Class" : "Add Class"}
                 </h3>
-                <p className="text-sm text-on-surface-variant mt-2">Choose a weekday slot, then add the course, room, and building.</p>
+                <p className="text-sm text-on-surface-variant mt-2">Choose a weekday and flexible time range, then add the course, room, and building.</p>
               </div>
               <button
                 onClick={closeScheduleModal}
@@ -1262,7 +1571,7 @@ export default function Dashboard() {
               <div className={`rounded-2xl border px-4 py-3 ${activeScheduleAppearance.cardClassName}`}>
                 <div className="flex items-center justify-between gap-3 flex-wrap">
                   <div>
-                    <p className="text-xs font-bold uppercase tracking-[0.18em] text-on-surface-variant">Style Preview</p>
+                    {/* <p className="text-xs font-bold uppercase tracking-[0.18em] text-on-surface-variant">Style Preview</p> */}
                     <p className="font-headline text-lg font-bold text-on-surface mt-1">
                       {scheduleForm.course.trim() || "Your class will appear here"}
                     </p>
@@ -1316,7 +1625,7 @@ export default function Dashboard() {
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div>
                   <label className="text-xs font-bold uppercase tracking-[0.18em] text-on-surface-variant block mb-2">Day</label>
                   <select
@@ -1334,21 +1643,49 @@ export default function Dashboard() {
                 </div>
 
                 <div>
-                  <label className="text-xs font-bold uppercase tracking-[0.18em] text-on-surface-variant block mb-2">Time Slot</label>
+                  <label className="text-xs font-bold uppercase tracking-[0.18em] text-on-surface-variant block mb-2">Start Time</label>
                   <select
                     required
-                    value={scheduleForm.slotKey}
-                    onChange={(event) => handleScheduleFieldChange("slotKey", event.target.value as ScheduleSlotKey)}
+                    value={scheduleForm.startTime}
+                    onChange={(event) => handleScheduleFieldChange("startTime", event.target.value)}
                     className="w-full rounded-2xl border border-outline-variant/40 bg-surface-container-low px-4 py-3 text-on-surface outline-none focus:border-primary"
                   >
-                    {SCHEDULE_SLOTS.map((slot) => (
-                      <option key={slot.key} value={slot.key}>
-                        {slot.startLabel} - {slot.endLabel}
+                    {scheduleTimeOptions.map((time) => (
+                      <option key={`start-${time}`} value={time}>
+                        {formatScheduleTimeLabel(time)}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="text-xs font-bold uppercase tracking-[0.18em] text-on-surface-variant block mb-2">End Time</label>
+                  <select
+                    required
+                    value={scheduleForm.endTime}
+                    onChange={(event) => handleScheduleFieldChange("endTime", event.target.value)}
+                    className="w-full rounded-2xl border border-outline-variant/40 bg-surface-container-low px-4 py-3 text-on-surface outline-none focus:border-primary"
+                  >
+                    {scheduleTimeOptions.map((time) => (
+                      <option key={`end-${time}`} value={time}>
+                        {formatScheduleTimeLabel(time)}
                       </option>
                     ))}
                   </select>
                 </div>
               </div>
+
+              {scheduleFormTimeError ? (
+                <div className="rounded-2xl border border-error/20 bg-error/10 px-4 py-3 text-sm text-on-surface-variant">
+                  {scheduleFormTimeError}
+                </div>
+              ) : null}
+
+              {scheduleFormHasConflict ? (
+                <div className="rounded-2xl border border-amber-400/25 bg-amber-500/10 px-4 py-3 text-sm text-amber-800 dark:text-amber-200">
+                  This class overlaps another class. You can still save it, and the planner will keep the conflict highlighted.
+                </div>
+              ) : null}
 
               {scheduleMutationError && (
                 <div className="rounded-2xl border border-error/20 bg-error/10 px-4 py-3 text-sm text-on-surface-variant">
@@ -1356,12 +1693,12 @@ export default function Dashboard() {
                 </div>
               )}
 
-              <div className="flex flex-col-reverse sm:flex-row sm:items-center sm:justify-between gap-3 pt-2">
+              <div className="flex flex-col-reverse gap-3 pt-2 sm:flex-row sm:items-center sm:justify-between">
                 <div>
-                  <div className="flex flex-col sm:flex-row gap-3 sm:items-center">
+                  <div className="flex flex-col gap-2.5 sm:flex-row sm:items-center">
                     <Link
                       to={activeScheduleRoute.to}
-                      className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-2.5 text-xs font-bold transition-colors md:gap-2 md:rounded-xl md:px-4 md:py-3 md:text-sm ${activeScheduleAppearance.badgeClassName}`}
+                      className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-bold transition-colors md:gap-2 md:rounded-xl md:px-3.5 md:py-2.5 md:text-sm ${activeScheduleAppearance.badgeClassName}`}
                     >
                       <Navigation className="h-3.5 w-3.5 md:h-4 md:w-4" /> {activeScheduleRoute.label}
                     </Link>
@@ -1370,29 +1707,29 @@ export default function Dashboard() {
                         type="button"
                         onClick={() => { void handleScheduleDelete(); }}
                         disabled={isSavingSchedule || isDeletingSchedule}
-                        className="inline-flex items-center gap-1.5 rounded-lg bg-error/10 px-3 py-2.5 text-xs font-bold text-error transition-colors hover:bg-error/15 disabled:opacity-50 md:gap-2 md:rounded-xl md:px-4 md:py-3 md:text-sm"
+                        className="inline-flex items-center gap-1.5 rounded-lg bg-error/10 px-3 py-2 text-xs font-bold text-error transition-colors hover:bg-error/15 disabled:opacity-50 md:gap-2 md:rounded-xl md:px-3.5 md:py-2.5 md:text-sm"
                       >
-                        <Trash2 className="h-3.5 w-3.5 md:h-4 md:w-4" /> Delete Class
+                        <Trash2 className="h-3.5 w-3.5 md:h-4 md:w-4" /> Delete
                       </button>
                     ) : null}
                   </div>
                 </div>
 
-                <div className="flex flex-col sm:flex-row gap-3 sm:items-center">
+                <div className="flex flex-col gap-2.5 sm:flex-row sm:items-center">
                   <button
                     type="button"
                     onClick={closeScheduleModal}
                     disabled={isSavingSchedule || isDeletingSchedule}
-                    className="rounded-lg bg-surface-container px-3 py-2.5 text-xs font-bold text-on-surface transition-colors hover:bg-surface-container-high disabled:opacity-50 md:rounded-xl md:px-4 md:py-3 md:text-sm"
+                    className="rounded-lg bg-surface-container px-3 py-2 text-xs font-bold text-on-surface transition-colors hover:bg-surface-container-high disabled:opacity-50 md:rounded-xl md:px-3.5 md:py-2.5 md:text-sm"
                   >
                     Cancel
                   </button>
                   <button
                     type="submit"
-                    disabled={isSavingSchedule || isDeletingSchedule}
-                    className="inline-flex items-center justify-center gap-1.5 rounded-lg bg-primary px-4 py-2.5 text-xs font-bold text-on-primary transition-colors hover:brightness-110 disabled:opacity-50 md:gap-2 md:rounded-xl md:px-5 md:py-3 md:text-sm"
+                    disabled={isSavingSchedule || isDeletingSchedule || Boolean(scheduleFormTimeError)}
+                    className="inline-flex items-center justify-center gap-1.5 rounded-lg bg-primary px-3.5 py-2 text-xs font-bold text-on-primary transition-colors hover:brightness-110 disabled:opacity-50 md:gap-2 md:rounded-xl md:px-4 md:py-2.5 md:text-sm"
                   >
-                    <CalendarDays className="h-3.5 w-3.5 md:h-4 md:w-4" /> {isSavingSchedule ? "Saving..." : editingScheduleEntryId ? "Save Changes" : "Add To Schedule"}
+                    <CalendarDays className="h-3.5 w-3.5 md:h-4 md:w-4" /> {isSavingSchedule ? "Saving..." : editingScheduleEntryId ? "Save change" : "Add Class"}
                   </button>
                 </div>
               </div>
@@ -1411,7 +1748,7 @@ export default function Dashboard() {
                 <span className="text-on-surface-variant font-body text-[10px] tracking-[0.2em] uppercase font-bold mb-2 block">Fast Import</span>
                 <h3 className="font-headline text-3xl font-bold text-primary tracking-tight">Bulk Add Schedule</h3>
                 <p className="text-sm text-on-surface-variant mt-2">
-                  Paste one class per line using `day | time | course | room | building`. Existing classes in the same slot will be updated.
+                  Paste one class per line using `day | start time | end time | course | room | building`. Legacy `day | time | ...` lines still work.
                 </p>
               </div>
               <button
@@ -1427,9 +1764,9 @@ export default function Dashboard() {
               <div className="rounded-2xl border border-outline-variant/25 bg-surface-container-low p-4 text-sm text-on-surface-variant">
                 <p className="font-bold text-on-surface mb-2">Example</p>
                 <pre className="whitespace-pre-wrap font-mono text-xs leading-6 text-primary">
-{`Mon | 09:30 | COP 3514 Data Structures | ENB 118 | ENB
-Tue | 11:30 | Calculus I | ISA 1051 | ISA
-Thu | 13:30 | Student Success Seminar | SVC 1 | SVC`}
+{`Mon | 9:30 AM | 10:45 AM | COP 3514 Data Structures | ENB 118 | ENB
+Tue | 11:30 AM | 12:45 PM | Calculus I | ISA 1051 | ISA
+Thu | 6:45 PM | 8:00 PM | Student Success Seminar | SVC 1 | SVC`}
                 </pre>
                 <p className="mt-3 text-xs">
                   For building, you can use the building code like `ENB`, the building id like `enb`, or the full building name.
@@ -1444,7 +1781,7 @@ Thu | 13:30 | Student Success Seminar | SVC 1 | SVC`}
                   onChange={(event) => setBulkScheduleText(event.target.value)}
                   rows={10}
                   className="w-full rounded-2xl border border-outline-variant/40 bg-surface-container-low px-4 py-3 text-on-surface outline-none focus:border-primary resize-y"
-                  placeholder="Mon | 09:30 | COP 3514 Data Structures | ENB 118 | ENB"
+                  placeholder="Mon | 9:30 AM | 10:45 AM | COP 3514 Data Structures | ENB 118 | ENB"
                 />
               </div>
 

@@ -11,7 +11,7 @@ import { randomUUID } from "node:crypto";
 import { prisma } from "./prisma";
 import { fetchShuttleSnapshot } from "./passio";
 import { getWalkingRoute, NavigationError, readRouteRequest } from "./navigation";
-import { isScheduleDay, isScheduleSlotKey } from "../src/lib/schedule";
+import { isScheduleDay, isScheduleRangeValid, parseScheduleTimeInput } from "../src/lib/schedule";
 
 const app = express();
 const port = Number(process.env.PORT ?? 4000);
@@ -101,15 +101,17 @@ function readScheduleEntry(value: unknown) {
   const room = readString(Reflect.get(entry, "room"));
   const buildingId = readString(Reflect.get(entry, "buildingId"));
   const dayOfWeek = readString(Reflect.get(entry, "dayOfWeek"));
-  const slotKey = readString(Reflect.get(entry, "slotKey"));
+  const startTime = parseScheduleTimeInput(readString(Reflect.get(entry, "startTime"))) ?? "";
+  const endTime = parseScheduleTimeInput(readString(Reflect.get(entry, "endTime"))) ?? "";
 
   return {
     course,
     room,
     buildingId,
     dayOfWeek,
-    slotKey,
-    isValid: Boolean(course && room && buildingId && isScheduleDay(dayOfWeek) && isScheduleSlotKey(slotKey)),
+    startTime,
+    endTime,
+    isValid: Boolean(course && room && buildingId && isScheduleDay(dayOfWeek) && isScheduleRangeValid(startTime, endTime)),
   };
 }
 
@@ -348,7 +350,7 @@ app.get(
 
     const entries = await prisma.scheduleEntry.findMany({
       where: { userId },
-      orderBy: [{ dayOfWeek: "asc" }, { slotKey: "asc" }],
+      orderBy: [{ dayOfWeek: "asc" }, { startTime: "asc" }, { endTime: "asc" }],
     });
 
     res.json({ entries });
@@ -363,34 +365,26 @@ app.post(
       return;
     }
 
-    const { course, room, buildingId, dayOfWeek, slotKey, isValid } = readScheduleEntry(req.body);
+    const { course, room, buildingId, dayOfWeek, startTime, endTime, isValid } = readScheduleEntry(req.body);
 
     if (!isValid) {
-      res.status(400).json({ error: "course, room, building, day, and time slot are required." });
+      res.status(400).json({ error: "course, room, building, day, start time, and end time are required." });
       return;
     }
 
-    try {
-      const entry = await prisma.scheduleEntry.create({
-        data: {
-          userId,
-          course,
-          room,
-          buildingId,
-          dayOfWeek,
-          slotKey,
-        },
-      });
+    const entry = await prisma.scheduleEntry.create({
+      data: {
+        userId,
+        course,
+        room,
+        buildingId,
+        dayOfWeek,
+        startTime,
+        endTime,
+      },
+    });
 
-      res.status(201).json({ entry });
-    } catch (error) {
-      if (isUniqueConstraintError(error)) {
-        res.status(409).json({ error: "That time slot already has a class. Edit the existing entry instead." });
-        return;
-      }
-
-      throw error;
-    }
+    res.status(201).json({ entry });
   })
 );
 
@@ -411,32 +405,21 @@ app.post(
     }
 
     if (entries.some((entry) => !entry.isValid)) {
-      res.status(400).json({ error: "Each imported line must include course, room, building, day, and time slot." });
+      res.status(400).json({ error: "Each imported line must include course, room, building, day, start time, and end time." });
       return;
     }
 
     const importedEntries = await prisma.$transaction(
       entries.map((entry) =>
-        prisma.scheduleEntry.upsert({
-          where: {
-            userId_dayOfWeek_slotKey: {
-              userId,
-              dayOfWeek: entry.dayOfWeek,
-              slotKey: entry.slotKey,
-            },
-          },
-          update: {
-            course: entry.course,
-            room: entry.room,
-            buildingId: entry.buildingId,
-          },
-          create: {
+        prisma.scheduleEntry.create({
+          data: {
             userId,
             course: entry.course,
             room: entry.room,
             buildingId: entry.buildingId,
             dayOfWeek: entry.dayOfWeek,
-            slotKey: entry.slotKey,
+            startTime: entry.startTime,
+            endTime: entry.endTime,
           },
         })
       )
@@ -455,10 +438,10 @@ app.patch(
     }
 
     const entryId = readString(req.params.entryId);
-    const { course, room, buildingId, dayOfWeek, slotKey, isValid } = readScheduleEntry(req.body);
+    const { course, room, buildingId, dayOfWeek, startTime, endTime, isValid } = readScheduleEntry(req.body);
 
     if (!entryId || !isValid) {
-      res.status(400).json({ error: "course, room, building, day, and time slot are required." });
+      res.status(400).json({ error: "course, room, building, day, start time, and end time are required." });
       return;
     }
 
@@ -474,27 +457,19 @@ app.patch(
       return;
     }
 
-    try {
-      const entry = await prisma.scheduleEntry.update({
-        where: { id: entryId },
-        data: {
-          course,
-          room,
-          buildingId,
-          dayOfWeek,
-          slotKey,
-        },
-      });
+    const entry = await prisma.scheduleEntry.update({
+      where: { id: entryId },
+      data: {
+        course,
+        room,
+        buildingId,
+        dayOfWeek,
+        startTime,
+        endTime,
+      },
+    });
 
-      res.json({ entry });
-    } catch (error) {
-      if (isUniqueConstraintError(error)) {
-        res.status(409).json({ error: "That time slot already has a class. Choose another slot or update the existing entry." });
-        return;
-      }
-
-      throw error;
-    }
+    res.json({ entry });
   })
 );
 

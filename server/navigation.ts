@@ -1,4 +1,4 @@
-import { BUILDINGS } from "../src/data/buildings";
+import { BUILDINGS, type Building, type BuildingEntrance, type EntranceApproachSide } from "../src/data/buildings";
 
 export type Coordinates = [number, number];
 
@@ -24,6 +24,7 @@ export interface NavigationResponse {
     arrival: Coordinates;
     arrivalLabel: string;
     arrivalHint: string;
+    arrivalInstruction: string;
   };
   route: NavigationRouteRecord;
  }
@@ -61,6 +62,17 @@ interface BuildingEntranceCandidate {
   routeTarget: Coordinates;
   label: string;
   hint: string;
+  isPrimary: boolean;
+  priority: number;
+  approachSide: EntranceApproachSide | null;
+  landmarkHint: string | null;
+  bestForRooms: string[];
+}
+
+interface EntranceRouteCandidate {
+  entrance: BuildingEntranceCandidate;
+  route: Omit<NavigationRouteRecord, "bounds">;
+  score: number;
 }
 
 const OPEN_ROUTE_SERVICE_URL = "https://api.openrouteservice.org/v2/directions/foot-walking/geojson";
@@ -189,14 +201,23 @@ function getCachedRoute(cacheKey: string) {
   return cachedEntry.value;
 }
 
-function getBuildingEntrances(building: (typeof BUILDINGS)[number]): BuildingEntranceCandidate[] {
+function normalizeEntrance(entrance: BuildingEntrance): BuildingEntranceCandidate {
+  return {
+    coordinates: entrance.coordinates,
+    routeTarget: entrance.routeTarget ?? entrance.coordinates,
+    label: entrance.label,
+    hint: entrance.hint,
+    isPrimary: Boolean(entrance.isPrimary),
+    priority: entrance.priority ?? 0,
+    approachSide: entrance.approachSide ?? null,
+    landmarkHint: entrance.landmarkHint ?? null,
+    bestForRooms: entrance.bestForRooms ?? [],
+  };
+}
+
+function getBuildingEntrances(building: Building): BuildingEntranceCandidate[] {
   if (building.entrances?.length) {
-    return building.entrances.map((entrance) => ({
-      coordinates: entrance.coordinates,
-      routeTarget: entrance.routeTarget ?? entrance.coordinates,
-      label: entrance.label,
-      hint: entrance.hint,
-    }));
+    return building.entrances.map(normalizeEntrance);
   }
 
   return [
@@ -205,6 +226,11 @@ function getBuildingEntrances(building: (typeof BUILDINGS)[number]): BuildingEnt
       routeTarget: building.primaryEntranceRouteTarget ?? building.primaryEntrance,
       label: building.primaryEntranceLabel,
       hint: building.primaryEntranceHint,
+      isPrimary: true,
+      priority: 0,
+      approachSide: null,
+      landmarkHint: null,
+      bestForRooms: [],
     },
   ];
 }
@@ -303,10 +329,7 @@ function moveTowardPoint(start: Coordinates, end: Coordinates, distanceMeters: n
   ];
 }
 
-function refineArrivalCoordinate(
-  building: (typeof BUILDINGS)[number],
-  entrance: BuildingEntranceCandidate
-): Coordinates {
+function refineArrivalCoordinate(building: Building, entrance: BuildingEntranceCandidate): Coordinates {
   const buildingCenter: Coordinates = [building.lat, building.lng];
   const entranceToCenterDistance = getDistanceMeters(entrance.coordinates, buildingCenter);
 
@@ -316,6 +339,95 @@ function refineArrivalCoordinate(
 
   const inwardOffsetMeters = Math.min(12, Math.max(5, entranceToCenterDistance * 0.3));
   return moveTowardPoint(entrance.coordinates, buildingCenter, inwardOffsetMeters);
+}
+
+function getRelativeApproachSide(point: Coordinates, building: Building): EntranceApproachSide {
+  const latDelta = point[0] - building.lat;
+  const lngDelta = point[1] - building.lng;
+
+  if (Math.abs(latDelta) >= Math.abs(lngDelta)) {
+    return latDelta >= 0 ? "north" : "south";
+  }
+
+  return lngDelta >= 0 ? "east" : "west";
+}
+
+function isOppositeSide(candidateSide: EntranceApproachSide | null, userSide: EntranceApproachSide) {
+  if (!candidateSide || candidateSide === "central") {
+    return false;
+  }
+
+  return (
+    (candidateSide === "north" && userSide === "south") ||
+    (candidateSide === "south" && userSide === "north") ||
+    (candidateSide === "east" && userSide === "west") ||
+    (candidateSide === "west" && userSide === "east")
+  );
+}
+
+function matchesRoomHint(roomId: string | null, building: Building, entrance: BuildingEntranceCandidate) {
+  if (!roomId || entrance.bestForRooms.length === 0) {
+    return false;
+  }
+
+  const room = building.rooms.find((entry) => entry.id === roomId) ?? null;
+  const searchableValues = [roomId, room?.name ?? "", room?.floor ?? "", room?.desc ?? ""].map((value) => value.toLowerCase());
+
+  return entrance.bestForRooms.some((hint) => {
+    const normalizedHint = hint.toLowerCase();
+    return searchableValues.some((value) => value.includes(normalizedHint));
+  });
+}
+
+function scoreEntranceCandidate(
+  start: Coordinates,
+  building: Building,
+  roomId: string | null,
+  candidate: { entrance: BuildingEntranceCandidate; route: Omit<NavigationRouteRecord, "bounds"> }
+) {
+  const userApproachSide = getRelativeApproachSide(start, building);
+  const roomMatched = matchesRoomHint(roomId, building, candidate.entrance);
+  const sideMatched = candidate.entrance.approachSide !== null && candidate.entrance.approachSide === userApproachSide;
+  const oppositeSide = isOppositeSide(candidate.entrance.approachSide, userApproachSide);
+
+  let score = candidate.route.distanceMeters;
+
+  if (candidate.entrance.isPrimary) {
+    score -= 35;
+  }
+
+  score -= candidate.entrance.priority * 12;
+
+  if (roomMatched) {
+    score -= 45;
+  }
+
+  if (sideMatched) {
+    score -= 24;
+  }
+
+  if (oppositeSide) {
+    score += 18;
+  }
+
+  return score;
+}
+
+function createArrivalInstruction(building: Building, entrance: BuildingEntranceCandidate, roomId: string | null) {
+  const room = roomId ? building.rooms.find((entry) => entry.id === roomId) ?? null : null;
+  const instructionParts = [`Head to the ${entrance.label} of ${building.name}.`];
+
+  if (entrance.landmarkHint) {
+    instructionParts.push(entrance.landmarkHint);
+  } else if (entrance.hint) {
+    instructionParts.push(entrance.hint);
+  }
+
+  if (room) {
+    instructionParts.push(`${room.name} is on the ${room.floor.toLowerCase()}.`);
+  }
+
+  return instructionParts.join(" ");
 }
 
 function setCachedRoute(cacheKey: string, value: NavigationResponse) {
@@ -377,7 +489,11 @@ export async function getWalkingRoute(start: Coordinates, destinationBuildingId:
 
   const bestCandidate = candidateResults
     .filter((candidate): candidate is { entrance: BuildingEntranceCandidate; route: Omit<NavigationRouteRecord, "bounds"> } => candidate !== null)
-    .sort((left, right) => left.route.distanceMeters - right.route.distanceMeters)[0];
+    .map((candidate) => ({
+      ...candidate,
+      score: scoreEntranceCandidate(start, building, roomId, candidate),
+    }))
+    .sort((left, right) => left.score - right.score || left.route.distanceMeters - right.route.distanceMeters)[0] as EntranceRouteCandidate | undefined;
 
   if (!bestCandidate) {
     throw new NavigationError("No walking route was returned for that destination.", 404);
@@ -399,6 +515,7 @@ export async function getWalkingRoute(start: Coordinates, destinationBuildingId:
       arrival: refinedArrival,
       arrivalLabel: bestCandidate.entrance.label,
       arrivalHint: bestCandidate.entrance.hint,
+      arrivalInstruction: createArrivalInstruction(building, bestCandidate.entrance, roomId),
     },
     route,
   };

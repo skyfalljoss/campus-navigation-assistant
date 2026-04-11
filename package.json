@@ -21,6 +21,8 @@
   "dependencies": {
     "@clerk/clerk-react": "^5.61.4",
     "@clerk/express": "^2.0.8",
+    "@dnd-kit/core": "^6.3.1",
+    "@dnd-kit/utilities": "^3.2.2",
     "@google/genai": "^1.29.0",
     "@prisma/client": "^6.17.1",
     "@tailwindcss/vite": "^4.1.14",

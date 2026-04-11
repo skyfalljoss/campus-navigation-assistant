@@ -24,7 +24,8 @@ export interface ScheduleEntryRecord {
   room: string;
   buildingId: string;
   dayOfWeek: string;
-  slotKey: string;
+  startTime: string;
+  endTime: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -101,6 +102,7 @@ export interface NavigationResponseRecord {
     arrival: [number, number];
     arrivalLabel: string;
     arrivalHint: string;
+    arrivalInstruction: string;
   };
   route: NavigationRouteRecord;
 }
@@ -116,7 +118,8 @@ interface ScheduleEntryPayload {
   room: string;
   buildingId: string;
   dayOfWeek: string;
-  slotKey: string;
+  startTime: string;
+  endTime: string;
 }
 
 interface BulkSchedulePayload {

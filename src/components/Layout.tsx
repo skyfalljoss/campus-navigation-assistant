@@ -115,12 +115,12 @@ export function TopBar({ isSidebarOpen }: { isSidebarOpen: boolean }) {
 
   return (
     <header className={cn(
-      "relative ml-auto flex justify-between md:justify-end items-center px-6 py-4 bg-surface/80 backdrop-blur-xl transition-all duration-300 pointer-events-auto",
+      "relative ml-auto flex justify-between md:justify-end items-center px-4 py-3 md:px-6 md:py-4 bg-surface/80 backdrop-blur-xl transition-all duration-300 pointer-events-auto",
       isSidebarOpen ? "w-full md:w-[calc(100%-18rem)]" : "w-full md:w-[calc(100%-6rem)]"
     )}>
-      <div className="text-xl font-bold tracking-tighter text-primary font-headline md:hidden">USF Assistant</div>
+      <div className="text-lg font-bold tracking-tighter text-primary font-headline md:hidden">USF Assistant</div>
       
-      <div className="flex items-center gap-2 md:gap-3 pointer-events-auto">
+      <div className="flex items-center gap-1.5 md:gap-3 pointer-events-auto">
         <form
           onSubmit={handleSearch}
           onClick={focusSearchInput}
@@ -148,39 +148,47 @@ export function TopBar({ isSidebarOpen }: { isSidebarOpen: boolean }) {
           type="button"
           onClick={openMapSearch}
           className={cn(
-            "flex h-10 w-10 items-center justify-center rounded-full text-on-surface transition-colors hover:bg-surface-container hover:text-primary",
+            "flex h-9 w-9 items-center justify-center rounded-full text-on-surface transition-colors hover:bg-surface-container hover:text-primary md:h-10 md:w-10",
             isMapPage ? "hidden" : "md:hidden"
           )}
           aria-label="Open map search"
         >
-          <Search className="w-5 h-5" />
+          <Search className="h-4 w-4 md:h-5 md:w-5" />
         </button>
         <button
           type="button"
           onClick={openNotifications}
-          className="flex h-10 w-10 items-center justify-center rounded-full text-on-surface transition-colors hover:bg-surface-container hover:text-primary"
+          className="flex h-9 w-9 items-center justify-center rounded-full text-on-surface transition-colors hover:bg-surface-container hover:text-primary md:h-10 md:w-10"
           aria-label="Open notification settings"
         >
-          <Bell className="w-5 h-5" />
+          <Bell className="h-4 w-4 md:h-5 md:w-5" />
         </button>
         <button
           type="button"
           onClick={openSettings}
-          className="flex h-10 w-10 items-center justify-center rounded-full text-on-surface transition-colors hover:bg-surface-container hover:text-primary"
+          className="flex h-9 w-9 items-center justify-center rounded-full text-on-surface transition-colors hover:bg-surface-container hover:text-primary md:h-10 md:w-10"
           aria-label="Open settings"
         >
-          <Settings className="w-5 h-5" />
+          <Settings className="h-4 w-4 md:h-5 md:w-5" />
         </button>
         <SignedOut>
           <SignInButton mode="modal">
-            <button className="ml-2 rounded-xl border border-outline-variant px-4 py-2 text-sm font-bold text-on-surface transition-colors hover:bg-surface-container">
-              Sign In
-            </button>
+            <button className="ml-1.5 rounded-xl border border-outline-variant/50 bg-surface-container-low/85 px-3 py-1.5 text-xs font-bold text-on-surface shadow-[0_8px_20px_rgba(10,20,16,0.06)] backdrop-blur-sm transition-colors hover:bg-surface-container md:ml-2 md:px-4 md:py-2 md:text-sm dark:border-primary/10 dark:bg-surface-container-low/90 dark:shadow-none">
+                Sign In
+              </button>
           </SignInButton>
         </SignedOut>
         <SignedIn>
-          <div className="ml-2 rounded-full border border-outline-variant/60 p-1">
-            <UserButton afterSignOutUrl="/" />
+          <div className="ml-1.5 rounded-full border border-outline-variant/45 bg-surface-container-low/80 p-1 shadow-[0_8px_18px_rgba(10,20,16,0.06)] backdrop-blur-sm md:ml-2 dark:border-primary/10 dark:bg-surface-container-low/88 dark:shadow-none">
+            <UserButton
+              afterSignOutUrl="/"
+              appearance={{
+                elements: {
+                  avatarBox: "h-8 w-8 md:h-9 md:w-9 ring-0 shadow-none",
+                  userButtonTrigger: "rounded-full focus:shadow-none",
+                },
+              }}
+            />
           </div>
         </SignedIn>
       </div>
@@ -200,7 +208,7 @@ export function BottomNav() {
   ];
 
   return (
-    <nav className="fixed bottom-0 left-0 w-full flex justify-around items-center px-3 pb-[max(1rem,env(safe-area-inset-bottom))] pt-2.5 bg-surface/88 backdrop-blur-xl z-50 rounded-t-[1.6rem] md:hidden border-t border-outline-variant/15 shadow-[0_-10px_30px_rgba(12,16,15,0.08)]">
+    <nav className="fixed bottom-0 left-0 z-50 flex w-full items-center justify-around rounded-t-[1.4rem] border-t border-outline-variant/15 bg-surface/88 px-2 pb-[max(0.875rem,env(safe-area-inset-bottom))] pt-2 backdrop-blur-xl shadow-[0_-10px_30px_rgba(12,16,15,0.08)] md:hidden">
       {navItems.map((item) => {
         const isActive = location.pathname === item.path || (item.path === '/map' && location.pathname === '/map');
         return (
@@ -208,12 +216,12 @@ export function BottomNav() {
             key={item.path}
             to={item.path}
             className={cn(
-              "flex min-w-0 flex-col items-center justify-center gap-0.5 rounded-xl px-2 py-1.5 group transition-colors",
+              "group flex min-w-0 flex-col items-center justify-center gap-0.5 rounded-lg px-1.5 py-1 transition-colors",
               isActive ? "text-primary" : "text-on-surface/50"
             )}
           >
-            <item.icon className={cn("w-5 h-5", isActive && "fill-primary/20")} />
-            <span className="font-label text-[10px] font-bold uppercase tracking-[0.16em] leading-none">
+            <item.icon className={cn("h-4 w-4", isActive && "fill-primary/20")} />
+            <span className="font-label text-[9px] font-bold uppercase tracking-[0.14em] leading-none">
               {item.label}
             </span>
           </Link>

@@ -3,10 +3,12 @@ import { Bell, Monitor, Moon, Shield, Smartphone, Sun } from "lucide-react";
 import { useLocation } from "react-router-dom";
 import { useEffect, useState } from "react";
 import {
+  applyThemePreference,
   EMAIL_UPDATES_STORAGE_KEY,
+  getThemePreference,
   LOCATION_SERVICES_STORAGE_KEY,
   PUSH_UPDATES_STORAGE_KEY,
-  THEME_STORAGE_KEY,
+  type ThemePreference,
 } from "../lib/preferences";
 
 function Toggle({
@@ -37,17 +39,7 @@ function Toggle({
 export default function SettingsPage() {
   const location = useLocation();
   const { openUserProfile } = useClerk();
-  const [theme, setTheme] = useState<"dark" | "light" | "system">(() => {
-    if (typeof window !== "undefined") {
-      const storedTheme = window.localStorage.getItem(THEME_STORAGE_KEY);
-      if (storedTheme === "dark" || storedTheme === "light" || storedTheme === "system") {
-        return storedTheme;
-      }
-
-      return "system";
-    }
-    return "system";
-  });
+  const [theme, setTheme] = useState<ThemePreference>(() => getThemePreference());
   const [pushPermission, setPushPermission] = useState<NotificationPermission | "unsupported">(() => {
     if (typeof window === "undefined" || !("Notification" in window)) {
       return "unsupported";
@@ -83,21 +75,7 @@ export default function SettingsPage() {
   const [locationMessage, setLocationMessage] = useState<string | null>(null);
 
   useEffect(() => {
-    const root = window.document.documentElement;
-    if (theme === "dark") {
-      root.classList.add("dark");
-    } else if (theme === "light") {
-      root.classList.remove("dark");
-    } else {
-      // System preference
-      if (window.matchMedia("(prefers-color-scheme: dark)").matches) {
-        root.classList.add("dark");
-      } else {
-        root.classList.remove("dark");
-      }
-    }
-
-    window.localStorage.setItem(THEME_STORAGE_KEY, theme);
+    applyThemePreference(theme);
   }, [theme]);
 
   useEffect(() => {

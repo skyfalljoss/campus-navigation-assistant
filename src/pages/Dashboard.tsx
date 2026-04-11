@@ -779,21 +779,21 @@ export default function Dashboard() {
   return (
     <div className="max-w-7xl mx-auto w-full">
       {/* Hero Section & Integrated Search */}
-      <section className="relative z-10 px-6 md:px-12 mb-16 flex flex-col items-start pt-8">
-        <h1 className="font-headline text-5xl md:text-7xl font-bold text-primary leading-[1.05] mb-12 tracking-tighter">
+      <section className="relative z-10 flex flex-col items-start px-4 pt-6 mb-12 md:px-12 md:pt-8 md:mb-16">
+        <h1 className="font-headline text-4xl md:text-7xl font-bold text-primary leading-[1.05] mb-8 md:mb-12 tracking-tighter">
           Where are you <br/>headed today?
         </h1>
         
         {/* Search Bar */}
         <form 
           onSubmit={handleSearch}
-          className="w-full max-w-3xl bg-surface-container-lowest p-2 rounded-2xl shadow-[0_8px_30px_rgb(0,0,0,0.06)] mb-16 cursor-text border border-outline-variant/30"
+          className="w-full max-w-3xl cursor-text rounded-2xl border border-outline-variant/30 bg-surface-container-lowest p-1.5 shadow-[0_8px_30px_rgb(0,0,0,0.06)] mb-12 md:p-2 md:mb-16"
           onClick={handleMobileSearchClick}
         >
-          <div className="relative flex items-center px-4 py-2">
-            <Search className="text-on-surface-variant mr-4 w-6 h-6" />
+          <div className="relative flex items-center px-3 py-2 md:px-4">
+            <Search className="mr-3 h-5 w-5 text-on-surface-variant md:mr-4 md:h-6 md:w-6" />
             <input 
-              className="bg-transparent border-none text-on-surface placeholder:text-on-surface-variant/50 focus:ring-0 focus:outline-none w-full font-body text-xl pointer-events-none md:pointer-events-auto" 
+              className="w-full bg-transparent border-none font-body text-base text-on-surface placeholder:text-on-surface-variant/50 focus:ring-0 focus:outline-none pointer-events-none md:pointer-events-auto md:text-xl" 
               placeholder="Enter building name, room number, or event..." 
               type="text"
               value={searchQuery}
@@ -807,15 +807,15 @@ export default function Dashboard() {
       </section>
 
       {/* Quick Navigation Tiles */}
-      <section className="relative z-10 px-6 md:px-12 mb-16">
-        <div className="flex items-end justify-between mb-8">
+      <section className="relative z-10 px-4 mb-12 md:px-12 md:mb-16">
+        <div className="mb-6 flex items-end justify-between md:mb-8">
           <div>
             <span className="text-on-surface-variant font-body text-[10px] tracking-[0.2em] uppercase font-bold mb-2 block">Quick Access</span>
-            <h2 className="font-headline text-3xl font-bold text-primary tracking-tight">Frequent Destinations</h2>
+            <h2 className="font-headline text-2xl md:text-3xl font-bold text-primary tracking-tight">Frequent Destinations</h2>
             <p className="text-sm text-on-surface-variant mt-2">{estimateNote}</p>
           </div>
-          <Link to="/map" className="text-on-surface font-bold flex items-center gap-2 hover:text-primary transition-colors">
-            View all <ArrowRight className="w-5 h-5" />
+          <Link to="/map" className="flex items-center gap-1.5 text-sm font-bold text-on-surface transition-colors hover:text-primary md:gap-2 md:text-base">
+            View all <ArrowRight className="h-4 w-4 md:h-5 md:w-5" />
           </Link>
         </div>
         
@@ -859,8 +859,8 @@ export default function Dashboard() {
         </div>
         )}
 
-        <div className="mt-8 glass-panel-heavy rounded-[24px] overflow-hidden">
-          <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between px-5 py-4 border-b border-outline-variant/20 bg-surface-container-low">
+        <div className="mt-6 overflow-hidden rounded-[24px] glass-panel-heavy md:mt-8">
+          <div className="flex flex-col gap-4 border-b border-outline-variant/20 bg-surface-container-low px-4 py-4 md:flex-row md:items-center md:justify-between md:px-5">
             <div>
               <span className="text-on-surface-variant font-body text-[10px] tracking-[0.2em] uppercase font-bold mb-2 block">Weekly Planner</span>
               <h3 className="font-headline text-xl md:text-2xl font-bold text-primary tracking-tight">Class Schedule</h3>
@@ -886,46 +886,46 @@ export default function Dashboard() {
               <div className="flex flex-col sm:flex-row gap-3">
                 <button
                   onClick={() => setIsScheduleCollapsed((current) => !current)}
-                  className="inline-flex items-center justify-center gap-2 bg-surface-container text-on-surface px-4 py-3 rounded-xl font-bold text-sm hover:bg-surface-container-high transition-colors border border-outline-variant/30"
+                  className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-outline-variant/30 bg-surface-container px-3 py-2.5 text-xs font-bold text-on-surface transition-colors hover:bg-surface-container-high md:gap-2 md:rounded-xl md:px-4 md:py-3 md:text-sm"
                 >
-                  {isScheduleCollapsed ? <ChevronDown className="w-4 h-4" /> : <ChevronUp className="w-4 h-4" />}
+                  {isScheduleCollapsed ? <ChevronDown className="h-3.5 w-3.5 md:h-4 md:w-4" /> : <ChevronUp className="h-3.5 w-3.5 md:h-4 md:w-4" />}
                   {isScheduleCollapsed ? "Expand" : "Collapse"}
                 </button>
                 <button
                   onClick={handleScheduleExport}
                   disabled={scheduleEntries.length === 0}
-                  className="inline-flex items-center justify-center gap-2 bg-surface-container text-on-surface px-5 py-3 rounded-xl font-bold text-sm hover:bg-surface-container-high transition-colors border border-outline-variant/30 disabled:opacity-45 disabled:hover:bg-surface-container"
+                  className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-outline-variant/30 bg-surface-container px-3.5 py-2.5 text-xs font-bold text-on-surface transition-colors hover:bg-surface-container-high disabled:opacity-45 disabled:hover:bg-surface-container md:gap-2 md:rounded-xl md:px-5 md:py-3 md:text-sm"
                 >
-                  <Download className="w-4 h-4" /> Export CSV
+                  <Download className="h-3.5 w-3.5 md:h-4 md:w-4" /> Export CSV
                 </button>
                 <button
                   onClick={() => {
                     setBulkScheduleError(null);
                     setIsBulkScheduleModalOpen(true);
                   }}
-                  className="inline-flex items-center justify-center gap-2 bg-surface-container text-on-surface px-5 py-3 rounded-xl font-bold text-sm hover:bg-surface-container-high transition-colors border border-outline-variant/30"
+                  className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-outline-variant/30 bg-surface-container px-3.5 py-2.5 text-xs font-bold text-on-surface transition-colors hover:bg-surface-container-high md:gap-2 md:rounded-xl md:px-5 md:py-3 md:text-sm"
                 >
-                  <Upload className="w-4 h-4" /> Bulk Import
+                  <Upload className="h-3.5 w-3.5 md:h-4 md:w-4" /> Bulk Import
                 </button>
                 <button
                   onClick={() => openCreateScheduleModal("mon", "09:30")}
-                  className="inline-flex items-center justify-center gap-2 bg-primary text-on-primary px-5 py-3 rounded-xl font-bold text-sm hover:brightness-110 transition-colors"
+                  className="inline-flex items-center justify-center gap-1.5 rounded-lg bg-primary px-3.5 py-2.5 text-xs font-bold text-on-primary transition-colors hover:brightness-110 md:gap-2 md:rounded-xl md:px-5 md:py-3 md:text-sm"
                 >
-                  <Plus className="w-4 h-4" /> Add Class
+                  <Plus className="h-3.5 w-3.5 md:h-4 md:w-4" /> Add Class
                 </button>
               </div>
             ) : (
               <div className="flex flex-col sm:flex-row gap-3">
                 <button
                   onClick={() => setIsScheduleCollapsed((current) => !current)}
-                  className="inline-flex items-center justify-center gap-2 bg-surface-container text-on-surface px-4 py-3 rounded-xl font-bold text-sm hover:bg-surface-container-high transition-colors border border-outline-variant/30"
+                  className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-outline-variant/30 bg-surface-container px-3 py-2.5 text-xs font-bold text-on-surface transition-colors hover:bg-surface-container-high md:gap-2 md:rounded-xl md:px-4 md:py-3 md:text-sm"
                 >
-                  {isScheduleCollapsed ? <ChevronDown className="w-4 h-4" /> : <ChevronUp className="w-4 h-4" />}
+                  {isScheduleCollapsed ? <ChevronDown className="h-3.5 w-3.5 md:h-4 md:w-4" /> : <ChevronUp className="h-3.5 w-3.5 md:h-4 md:w-4" />}
                   {isScheduleCollapsed ? "Preview" : "Hide"}
                 </button>
                 <SignInButton mode="modal">
-                  <button className="inline-flex items-center justify-center gap-2 bg-primary text-on-primary px-5 py-3 rounded-xl font-bold text-sm hover:brightness-110 transition-colors">
-                    <CalendarDays className="w-4 h-4" /> Sign In To Edit
+                  <button className="inline-flex items-center justify-center gap-1.5 rounded-xl bg-primary px-4 py-2.5 text-xs font-bold text-on-primary shadow-[0_10px_24px_rgba(0,103,71,0.18)] transition-colors hover:brightness-110 dark:shadow-[0_12px_28px_rgba(132,215,175,0.18)] md:gap-2 md:px-5 md:py-3 md:text-sm">
+                    <CalendarDays className="h-3.5 w-3.5 md:h-4 md:w-4" /> Sign In To Edit
                   </button>
                 </SignInButton>
               </div>
@@ -947,16 +947,16 @@ export default function Dashboard() {
               </div>
             </div>
           ) : !isSignedIn ? (
-            <div className="px-6 py-8 text-center text-on-surface-variant">
+            <div className="px-4 py-7 text-center text-on-surface-variant md:px-6 md:py-8">
               Sign in to build a personal weekly schedule that stays synced with your account.
             </div>
           ) : isLoadingSchedule ? (
-            <div className="px-6 py-8 text-center text-on-surface-variant">Loading your weekly schedule...</div>
+            <div className="px-4 py-7 text-center text-on-surface-variant md:px-6 md:py-8">Loading your weekly schedule...</div>
           ) : scheduleLoadError ? (
-            <div className="px-6 py-8 text-center text-on-surface-variant">{scheduleLoadError}</div>
+            <div className="px-4 py-7 text-center text-on-surface-variant md:px-6 md:py-8">{scheduleLoadError}</div>
           ) : (
             <>
-              <div className="md:hidden px-4 py-4">
+              <div className="px-3 py-4 md:hidden">
                 <div className="flex gap-2 overflow-x-auto pb-2">
                   {SCHEDULE_DAYS.map((day) => (
                     <button
@@ -1124,13 +1124,13 @@ export default function Dashboard() {
         </div>
       </section>
 
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-12 px-6 md:px-12 mb-12">
+      <div className="grid grid-cols-1 gap-10 px-4 mb-12 md:px-12 lg:grid-cols-12 lg:gap-12">
         {/* Live Campus Stats */}
         <section className="lg:col-span-4 relative z-10">
-          <h2 className="font-headline text-2xl font-bold text-primary tracking-tight mb-8">Live Campus Stats</h2>
-          <div className="flex flex-col gap-8">
-            <div className="flex items-center gap-6">
-              <div className="w-14 h-14 rounded-xl bg-tertiary-container flex items-center justify-center shrink-0">
+          <h2 className="mb-6 font-headline text-2xl font-bold text-primary tracking-tight md:mb-8">Live Campus Stats</h2>
+          <div className="flex flex-col gap-6 md:gap-8">
+            <div className="flex items-center gap-4 md:gap-6">
+              <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-tertiary-container md:h-14 md:w-14">
                 <Building2 className="w-6 h-6 text-on-tertiary-container" />
               </div>
               <div>
@@ -1139,8 +1139,8 @@ export default function Dashboard() {
               </div>
             </div>
             
-            <div className="flex items-center gap-6">
-              <div className="w-14 h-14 rounded-xl bg-tertiary-container flex items-center justify-center shrink-0">
+            <div className="flex items-center gap-4 md:gap-6">
+              <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-tertiary-container md:h-14 md:w-14">
                 <Library className="w-6 h-6 text-on-tertiary-container" />
               </div>
               <div>
@@ -1149,8 +1149,8 @@ export default function Dashboard() {
               </div>
             </div>
             
-            <div className="flex items-center gap-6">
-              <div className="w-14 h-14 rounded-xl bg-tertiary-container flex items-center justify-center shrink-0">
+            <div className="flex items-center gap-4 md:gap-6">
+              <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-tertiary-container md:h-14 md:w-14">
                 <Bus className="w-6 h-6 text-on-tertiary-container" />
               </div>
               <div>
@@ -1165,33 +1165,33 @@ export default function Dashboard() {
 
         {/* Current Activity */}
         <section className="lg:col-span-8 relative z-10">
-          <div className="flex items-end justify-between mb-8">
+          <div className="mb-6 flex items-end justify-between md:mb-8">
             <div>
               <h2 className="font-headline text-2xl font-bold text-primary tracking-tight">Live Shuttle</h2>
               <p className="text-sm text-on-surface-variant mt-2">Real-time Bull Runner status powered by Passio.</p>
             </div>
-            <Link to="/shuttle" className="text-on-surface font-bold flex items-center gap-2 hover:text-primary transition-colors">
-              Full shuttle view <ArrowRight className="w-5 h-5" />
+            <Link to="/shuttle" className="flex items-center gap-1.5 text-sm font-bold text-on-surface transition-colors hover:text-primary md:gap-2 md:text-base">
+              Full shuttle view <ArrowRight className="h-4 w-4 md:h-5 md:w-5" />
             </Link>
           </div>
 
           {isLoadingShuttle ? (
-            <div className="glass-panel p-6 rounded-3xl text-on-surface-variant">Loading live Bull Runner data...</div>
+            <div className="glass-panel rounded-3xl p-5 text-on-surface-variant md:p-6">Loading live Bull Runner data...</div>
           ) : shuttleError ? (
-            <div className="glass-panel p-6 rounded-3xl border border-error/20 bg-error/5">
+            <div className="glass-panel rounded-3xl border border-error/20 bg-error/5 p-5 md:p-6">
               <h3 className="font-headline text-lg font-bold text-on-surface mb-2">Live shuttle feed unavailable</h3>
               <p className="text-sm text-on-surface-variant">{shuttleError}</p>
             </div>
           ) : shuttleOverview ? (
-            <div className="bg-surface-container p-6 md:p-7 rounded-3xl border border-outline-variant/20 flex flex-col gap-5">
-              <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-5">
-                <div className="flex items-start gap-4">
-                  <div className="w-14 h-14 bg-surface-container-lowest rounded-2xl flex items-center justify-center shrink-0 shadow-sm">
+            <div className="flex flex-col gap-5 rounded-3xl border border-outline-variant/20 bg-surface-container p-5 md:p-7">
+              <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between lg:gap-5">
+                <div className="flex items-start gap-3 md:gap-4">
+                  <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-surface-container-lowest shadow-sm md:h-14 md:w-14">
                     <Bus className="w-7 h-7 text-primary" />
                   </div>
                   <div>
                     <span className="text-[10px] text-on-surface-variant font-bold uppercase tracking-[0.22em]">Bull Runner Live</span>
-                    <h3 className="font-headline font-bold text-primary text-2xl mt-2">{shuttleOverview.activeVehicleCount} Active Bus{shuttleOverview.activeVehicleCount === 1 ? "" : "es"}</h3>
+                    <h3 className="mt-1.5 font-headline text-xl md:text-2xl font-bold text-primary">{shuttleOverview.activeVehicleCount} Active Bus{shuttleOverview.activeVehicleCount === 1 ? "" : "es"}</h3>
                     <p className="text-sm text-on-surface-variant mt-2">
                       {primaryShuttleAlert ? primaryShuttleAlert.title : "No active service alerts right now."}
                     </p>
@@ -1200,9 +1200,9 @@ export default function Dashboard() {
 
                 <Link
                   to="/shuttle"
-                  className="inline-flex items-center gap-2 self-start bg-primary text-on-primary rounded-xl px-4 py-3 font-bold hover:brightness-110 transition-colors"
+                  className="inline-flex items-center gap-1.5 self-start rounded-lg bg-primary px-3 py-2 text-sm font-bold text-on-primary transition-colors hover:brightness-110 md:gap-2 md:rounded-xl md:px-4 md:py-3 md:text-base"
                 >
-                  <MapIcon className="w-4 h-4" /> More Shuttle Info
+                  <MapIcon className="h-3.5 w-3.5 md:h-4 md:w-4" /> More Shuttle Info
                 </Link>
               </div>
 
@@ -1252,9 +1252,9 @@ export default function Dashboard() {
               <button
                 onClick={closeScheduleModal}
                 disabled={isSavingSchedule || isDeletingSchedule}
-                className="rounded-full bg-surface-container p-2 text-on-surface-variant hover:bg-surface-container-high transition-colors disabled:opacity-50"
+                className="rounded-full bg-surface-container p-1.5 text-on-surface-variant transition-colors hover:bg-surface-container-high disabled:opacity-50 md:p-2"
               >
-                <X className="w-5 h-5" />
+                <X className="h-4 w-4 md:h-5 md:w-5" />
               </button>
             </div>
 
@@ -1361,18 +1361,18 @@ export default function Dashboard() {
                   <div className="flex flex-col sm:flex-row gap-3 sm:items-center">
                     <Link
                       to={activeScheduleRoute.to}
-                      className={`inline-flex items-center gap-2 rounded-xl px-4 py-3 text-sm font-bold transition-colors ${activeScheduleAppearance.badgeClassName}`}
+                      className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-2.5 text-xs font-bold transition-colors md:gap-2 md:rounded-xl md:px-4 md:py-3 md:text-sm ${activeScheduleAppearance.badgeClassName}`}
                     >
-                      <Navigation className="w-4 h-4" /> {activeScheduleRoute.label}
+                      <Navigation className="h-3.5 w-3.5 md:h-4 md:w-4" /> {activeScheduleRoute.label}
                     </Link>
                     {editingScheduleEntryId ? (
                       <button
                         type="button"
                         onClick={() => { void handleScheduleDelete(); }}
                         disabled={isSavingSchedule || isDeletingSchedule}
-                        className="inline-flex items-center gap-2 rounded-xl px-4 py-3 text-sm font-bold text-error bg-error/10 hover:bg-error/15 transition-colors disabled:opacity-50"
+                        className="inline-flex items-center gap-1.5 rounded-lg bg-error/10 px-3 py-2.5 text-xs font-bold text-error transition-colors hover:bg-error/15 disabled:opacity-50 md:gap-2 md:rounded-xl md:px-4 md:py-3 md:text-sm"
                       >
-                        <Trash2 className="w-4 h-4" /> Delete Class
+                        <Trash2 className="h-3.5 w-3.5 md:h-4 md:w-4" /> Delete Class
                       </button>
                     ) : null}
                   </div>
@@ -1383,16 +1383,16 @@ export default function Dashboard() {
                     type="button"
                     onClick={closeScheduleModal}
                     disabled={isSavingSchedule || isDeletingSchedule}
-                    className="rounded-xl px-4 py-3 text-sm font-bold text-on-surface bg-surface-container hover:bg-surface-container-high transition-colors disabled:opacity-50"
+                    className="rounded-lg bg-surface-container px-3 py-2.5 text-xs font-bold text-on-surface transition-colors hover:bg-surface-container-high disabled:opacity-50 md:rounded-xl md:px-4 md:py-3 md:text-sm"
                   >
                     Cancel
                   </button>
                   <button
                     type="submit"
                     disabled={isSavingSchedule || isDeletingSchedule}
-                    className="inline-flex items-center justify-center gap-2 rounded-xl bg-primary text-on-primary px-5 py-3 text-sm font-bold hover:brightness-110 transition-colors disabled:opacity-50"
+                    className="inline-flex items-center justify-center gap-1.5 rounded-lg bg-primary px-4 py-2.5 text-xs font-bold text-on-primary transition-colors hover:brightness-110 disabled:opacity-50 md:gap-2 md:rounded-xl md:px-5 md:py-3 md:text-sm"
                   >
-                    <CalendarDays className="w-4 h-4" /> {isSavingSchedule ? "Saving..." : editingScheduleEntryId ? "Save Changes" : "Add To Schedule"}
+                    <CalendarDays className="h-3.5 w-3.5 md:h-4 md:w-4" /> {isSavingSchedule ? "Saving..." : editingScheduleEntryId ? "Save Changes" : "Add To Schedule"}
                   </button>
                 </div>
               </div>
@@ -1417,9 +1417,9 @@ export default function Dashboard() {
               <button
                 onClick={closeBulkScheduleModal}
                 disabled={isBulkImportingSchedule}
-                className="rounded-full bg-surface-container p-2 text-on-surface-variant hover:bg-surface-container-high transition-colors disabled:opacity-50"
+                className="rounded-full bg-surface-container p-1.5 text-on-surface-variant transition-colors hover:bg-surface-container-high disabled:opacity-50 md:p-2"
               >
-                <X className="w-5 h-5" />
+                <X className="h-4 w-4 md:h-5 md:w-5" />
               </button>
             </div>
 
@@ -1459,16 +1459,16 @@ Thu | 13:30 | Student Success Seminar | SVC 1 | SVC`}
                   type="button"
                   onClick={closeBulkScheduleModal}
                   disabled={isBulkImportingSchedule}
-                  className="rounded-xl px-4 py-3 text-sm font-bold text-on-surface bg-surface-container hover:bg-surface-container-high transition-colors disabled:opacity-50"
+                  className="rounded-lg bg-surface-container px-3 py-2.5 text-xs font-bold text-on-surface transition-colors hover:bg-surface-container-high disabled:opacity-50 md:rounded-xl md:px-4 md:py-3 md:text-sm"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
                   disabled={isBulkImportingSchedule}
-                  className="inline-flex items-center justify-center gap-2 rounded-xl bg-primary text-on-primary px-5 py-3 text-sm font-bold hover:brightness-110 transition-colors disabled:opacity-50"
+                  className="inline-flex items-center justify-center gap-1.5 rounded-lg bg-primary px-4 py-2.5 text-xs font-bold text-on-primary transition-colors hover:brightness-110 disabled:opacity-50 md:gap-2 md:rounded-xl md:px-5 md:py-3 md:text-sm"
                 >
-                  <Upload className="w-4 h-4" /> {isBulkImportingSchedule ? "Importing..." : "Import Schedule"}
+                  <Upload className="h-3.5 w-3.5 md:h-4 md:w-4" /> {isBulkImportingSchedule ? "Importing..." : "Import Schedule"}
                 </button>
               </div>
             </form>

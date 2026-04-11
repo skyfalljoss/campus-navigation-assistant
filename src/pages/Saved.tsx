@@ -82,7 +82,7 @@ export default function SavedPage() {
             You can explore the map as a guest, but bookmarks stay attached to your account once you sign in.
           </p>
           <SignInButton mode="modal">
-            <button className="bg-primary text-on-primary px-6 py-3 rounded-xl font-bold text-sm hover:brightness-110 transition-all">
+            <button className="rounded-2xl bg-primary px-6 py-3 text-sm font-bold text-on-primary shadow-[0_10px_24px_rgba(0,103,71,0.18)] transition-all hover:brightness-110 dark:shadow-[0_12px_28px_rgba(132,215,175,0.18)]">
               Sign In
             </button>
           </SignInButton>

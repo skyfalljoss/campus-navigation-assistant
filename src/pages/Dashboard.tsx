@@ -11,6 +11,8 @@ import { subscribeToRecentDestinationsUpdates } from "../lib/recent-destinations
 import {
   DEFAULT_SCHEDULE_DAY,
   DEFAULT_SCHEDULE_END_TIME,
+  SCHEDULE_OPTION_END_TIME,
+  SCHEDULE_OPTION_START_TIME,
   DEFAULT_SCHEDULE_START_TIME,
   SCHEDULE_DAYS,
   buildScheduleTimeOptions,
@@ -711,6 +713,18 @@ export default function Dashboard() {
   const visibleScheduleRows = useMemo(() => buildScheduleVisibleTimeRows(scheduleEntries), [scheduleEntries]);
 
   const scheduleTimeOptions = useMemo(() => buildScheduleTimeOptions(scheduleEntries), [scheduleEntries]);
+
+  const scheduleStartTimeOptions = useMemo(() => {
+    return scheduleTimeOptions.filter(
+      (time) => compareScheduleTimes(time, SCHEDULE_OPTION_START_TIME) >= 0 && compareScheduleTimes(time, SCHEDULE_OPTION_END_TIME) < 0
+    );
+  }, [scheduleTimeOptions]);
+
+  const scheduleEndTimeOptions = useMemo(() => {
+    return scheduleTimeOptions.filter(
+      (time) => compareScheduleTimes(time, SCHEDULE_OPTION_START_TIME) > 0 && compareScheduleTimes(time, SCHEDULE_OPTION_END_TIME) <= 0
+    );
+  }, [scheduleTimeOptions]);
 
   const activeDraggedEntry = useMemo(
     () => scheduleEntries.find((entry) => entry.id === activeDragEntryId) ?? null,
@@ -1650,7 +1664,7 @@ export default function Dashboard() {
                     onChange={(event) => handleScheduleFieldChange("startTime", event.target.value)}
                     className="w-full rounded-2xl border border-outline-variant/40 bg-surface-container-low px-4 py-3 text-on-surface outline-none focus:border-primary"
                   >
-                    {scheduleTimeOptions.map((time) => (
+                    {scheduleStartTimeOptions.map((time) => (
                       <option key={`start-${time}`} value={time}>
                         {formatScheduleTimeLabel(time)}
                       </option>
@@ -1666,7 +1680,7 @@ export default function Dashboard() {
                     onChange={(event) => handleScheduleFieldChange("endTime", event.target.value)}
                     className="w-full rounded-2xl border border-outline-variant/40 bg-surface-container-low px-4 py-3 text-on-surface outline-none focus:border-primary"
                   >
-                    {scheduleTimeOptions.map((time) => (
+                    {scheduleEndTimeOptions.map((time) => (
                       <option key={`end-${time}`} value={time}>
                         {formatScheduleTimeLabel(time)}
                       </option>

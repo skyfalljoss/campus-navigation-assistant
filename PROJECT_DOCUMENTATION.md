@@ -1,27 +1,31 @@
-# Campus Navigation Assistant: Detailed Project Documentation
+# Campus Navigation Assistant: Project Documentation
 
 ## 1. Project Summary
 
-Campus Navigation Assistant is a front-end React application designed to help students and visitors explore a university campus, search for buildings and rooms, save destinations, and preview walking directions on an interactive map.
+Campus Navigation Assistant is a full-stack campus web application for the University of South Florida experience. It combines a React frontend with an Express API, Clerk authentication, Prisma-backed persistence, live shuttle data from Passio, and walking directions powered by OpenRouteService.
 
-The current implementation is centered on a USF-themed campus experience. It is not a full GIS or turn-by-turn navigation engine. Instead, it uses:
+The app is designed to help users:
 
-- a curated static dataset of campus buildings and rooms
-- browser geolocation for user positioning
-- Leaflet for map visualization
-- a lightweight heuristic route generator for walking guidance
+- search campus buildings and rooms
+- view an interactive campus map
+- generate walking directions to building entrances and room-adjacent arrivals
+- track Bull Runner shuttle routes, vehicles, and service alerts
+- save destinations and review recent activity
+- manage a personal class schedule
+- persist interface preferences such as theme and notifications
 
-This makes the project fast to run locally, easy to understand, and suitable as a strong prototype or portfolio-ready product demo.
+This is no longer just a frontend prototype. The checked-in codebase includes a real backend, authenticated user flows, a PostgreSQL schema, and Playwright end-to-end coverage.
 
-## 2. Main Goals of the Project
+## 2. Product Goals
 
-The codebase is built around five practical goals:
+The current codebase centers on six practical goals:
 
-1. Let users discover campus places visually through a map-first interface.
-2. Let users search by building or room name.
-3. Let users save common destinations for faster revisit.
-4. Let users estimate walking time from their current or last known location.
-5. Present the product with a polished, modern, responsive UI.
+1. Provide a polished map-first campus discovery experience.
+2. Let users search for buildings and rooms quickly from multiple entry points.
+3. Offer authenticated persistence for saved places, recent searches, and schedules.
+4. Show useful real-time campus transit information without forcing users into a separate system.
+5. Generate credible walking routes using a server-side routing provider instead of simple frontend heuristics alone.
+6. Keep the app responsive and usable on both desktop and mobile.
 
 ## 3. Technology Stack
 
@@ -31,52 +35,68 @@ The codebase is built around five practical goals:
 - TypeScript
 - Vite
 - React Router DOM
+- Tailwind CSS v4
 - Leaflet
 - React Leaflet
-- Tailwind CSS v4
 - Lucide React
+- DnD Kit for schedule drag-and-drop
 - `clsx` + `tailwind-merge`
 
-### Browser APIs
+### Backend
 
-- `navigator.geolocation.getCurrentPosition`
-- `navigator.geolocation.watchPosition`
-- `localStorage`
-
-### Tooling and Build
-
-- Vite dev server and bundler
-- TypeScript type checking via `tsc --noEmit`
-
-### Notes on Installed but Currently Unused Packages
-
-The project still includes a few packages from an earlier scaffold:
-
-- `@google/genai`
-- `express`
+- Express
+- Clerk Express middleware
+- Prisma
+- PostgreSQL
 - `dotenv`
+- `tsx`
 
-At the moment, the checked-in frontend code does not use them for runtime features.
+### External Services
+
+- Clerk for authentication and account UI
+- OpenRouteService for walking directions
+- Passio for Bull Runner shuttle data
+- Neon-compatible PostgreSQL via Prisma connection strings
+
+### Testing And Tooling
+
+- Playwright for E2E coverage
+- TypeScript compile checks via `tsc --noEmit`
+- `autocannon` load check for `/api/health`
 
 ## 4. High-Level Architecture
 
-The app follows a simple client-side architecture:
+The application is split into two runtime layers.
 
-1. `index.html` provides the root mount point.
-2. `src/main.tsx` boots React and renders the app.
-3. `src/App.tsx` defines client-side routes.
-4. `src/components/Layout.tsx` wraps all pages in a shared shell.
-5. Individual pages implement product features.
-6. `src/data/buildings.ts` provides the campus dataset.
-7. `src/lib/navigation.ts` contains navigation math and persistence helpers.
+### Frontend layer
 
-In other words:
+The frontend renders the user experience, manages page state, talks to the API through `src/lib/api.ts`, and renders maps with Leaflet.
 
-- React handles rendering and state
-- React Router handles navigation between screens
-- Leaflet handles the map canvas and markers
-- static TypeScript objects provide the campus content
-- small utility functions handle route estimation and formatting
+Key frontend entry points:
+
+- `src/main.tsx` bootstraps React and Clerk
+- `src/App.tsx` defines routes
+- `src/components/Layout.tsx` provides shared desktop and mobile chrome
+- `src/pages/*` implement feature screens
+
+### Backend layer
+
+The backend owns authenticated persistence, shuttle normalization, and route generation.
+
+Key backend entry points:
+
+- `server/index.ts` defines the Express server and API routes
+- `server/prisma.ts` exports the Prisma singleton
+- `server/navigation.ts` calls OpenRouteService and shapes route responses
+- `server/passio.ts` fetches and normalizes live Bull Runner data
+
+### Shared domain layer
+
+A few modules are shared across client and server:
+
+- `src/data/buildings.ts` contains building, room, and entrance metadata
+- `src/lib/schedule.ts` contains schedule parsing and validation rules used by both layers
+- `src/lib/api.ts` defines response shapes consumed by the UI
 
 ## 5. Project Structure
 
@@ -87,1064 +107,554 @@ src/
   data/
     buildings.ts
   lib/
+    api.ts
     navigation.ts
+    preferences.ts
+    recent-destinations.ts
+    route-tracking.ts
+    schedule.ts
     utils.ts
   pages/
     Dashboard.tsx
     Map.tsx
-    Saved.tsx
     Profile.tsx
+    Saved.tsx
     Settings.tsx
+    Shuttle.tsx
   App.tsx
   main.tsx
-  index.css
 
-index.html
-vite.config.ts
-tsconfig.json
-README.md
-PROJECT_DOCUMENTATION.md
+server/
+  index.ts
+  navigation.ts
+  passio.ts
+  prisma.ts
+
+prisma/
+  schema.prisma
+  migrations/
+
+scripts/
+  load-health.ts
+  test-passio-api.ts
+
+tests/
+  e2e/
+  fixtures/
+  mocks/
+  pages/
 ```
 
-## 6. Application Boot Flow
+## 6. Runtime Flow
 
-### 6.1 `index.html`
+### App boot
 
-The HTML file is minimal:
+1. `index.html` provides the `#root` mount point.
+2. `src/main.tsx` initializes theme syncing and renders `ClerkProvider`.
+3. `src/App.tsx` mounts the routed application inside `Layout`.
+4. `Layout` renders desktop sidebar, top bar, and mobile bottom navigation.
 
-- defines the document shell
-- sets viewport meta tags
-- sets the title to `USF Campus Navigator`
-- exposes a single `<div id="root"></div>` mount node
+### API flow
 
-### 6.2 `src/main.tsx`
+1. Frontend code calls helpers in `src/lib/api.ts`.
+2. The helper adds JSON headers and a bearer token when needed.
+3. Requests go to same-origin `/api/*` by default, or `VITE_API_BASE_URL` if configured.
+4. In development, Vite proxies `/api` to the Express server.
+5. In production, the Express server serves both the SPA and API.
 
-`main.tsx` is the React entry point. It:
+## 7. Environment And Configuration
 
-- imports `StrictMode`
-- imports `createRoot`
-- imports the top-level `App`
-- imports `index.css`
-- renders `<App />` into `#root`
+The checked-in `.env.example` currently expects:
 
-This is standard Vite + React bootstrapping.
+- `VITE_CLERK_PUBLISHABLE_KEY`
+- `CLERK_PUBLISHABLE_KEY`
+- `CLERK_SECRET_KEY`
+- `DATABASE_URL`
+- `DIRECT_URL`
+- `PORT`
+- `CORS_ORIGIN`
+- `PASSIO_SYSTEM_ID`
+- `OPENROUTESERVICE_API_KEY`
+- `VITE_API_BASE_URL`
 
-### 6.3 `src/App.tsx`
+Important configuration details:
 
-`App.tsx` wraps the application in `BrowserRouter` and defines these routes:
+- `PORT` defaults to `4000`
+- the frontend dev server runs on `3000`
+- `PASSIO_SYSTEM_ID` defaults to Bull Runner system `2343`
+- OpenRouteService is required for live walking route generation
+- the TypeScript alias `@/*` points to the repo root, not `src/`
+- `vite.config.ts` supports disabling HMR with `DISABLE_HMR=true`
 
-- `/` -> `Dashboard`
-- `/map` -> `MapPage`
-- `/saved` -> `SavedPage`
-- `/profile` -> `ProfilePage`
-- `/settings` -> `SettingsPage`
-- `*` -> simple "Coming Soon" fallback
+## 8. Frontend Routes And Screens
 
-This means all navigation is client-side, with no server-rendered route handling.
+### `/` Dashboard
 
-## 7. Shared Layout System
+`src/pages/Dashboard.tsx` is the largest dashboard and planner surface in the app. It combines several features:
 
-The layout is implemented in `src/components/Layout.tsx`.
+- hero search that forwards users to `/map`
+- recent destinations loaded from the authenticated API
+- shuttle status summary loaded from `/api/shuttle/overview`
+- ETA-aware destination cards using the last known or live location
+- a full class schedule planner backed by the API
 
-It provides three major UI shells:
+Important dashboard behaviors:
 
-- desktop sidebar
-- top header bar
+- geolocation attempts to upgrade the location source from campus center to saved location to live GPS
+- schedule data is loaded only for signed-in users
+- schedule conflicts are computed client-side with shared helpers
+- recent destinations refresh when the map page dispatches a cross-page update event
+- shuttle summary refreshes on an interval
+- schedule planner collapse state is stored in `localStorage`
+
+### `/map` Campus Map
+
+`src/pages/Map.tsx` is the most feature-rich page.
+
+Major responsibilities:
+
+- search buildings and rooms
+- filter by tags such as study, dining, and parking
+- show building details and room-level details
+- save and unsave locations for authenticated users
+- record recent selections for authenticated users
+- request walking directions from the server
+- track live location during navigation
+- reroute if the user moves meaningfully or goes off-route
+- optionally provide voice guidance
+- react to deep links via query parameters
+
+Important URL parameters:
+
+- `dest` for preselected building
+- `room` for preselected room
+- `q` for initial search text
+- `navigate=1` to attempt automatic navigation after selection is ready
+
+The map page uses several supporting modules:
+
+- `src/lib/navigation.ts` for client-side distance formatting and last-known location persistence
+- `src/lib/route-tracking.ts` for nearest point, remaining distance, and off-route detection
+- `src/lib/preferences.ts` for location-service preference checks
+- `src/lib/recent-destinations.ts` for cross-page recent destination refreshes
+
+### `/shuttle` Bull Runner Live
+
+`src/pages/Shuttle.tsx` renders live shuttle information using the normalized overview from the backend.
+
+It includes:
+
+- route filters
+- active vehicle counts
+- service alerts
+- operating hours extraction from Passio alerts
+- a Leaflet map showing route polylines, stops, and vehicles
+- periodic refresh every 20 seconds
+
+### `/saved` Saved Locations
+
+`src/pages/Saved.tsx` loads saved building IDs for the signed-in user and maps them back to static building metadata.
+
+It supports:
+
+- guest empty/sign-in state
+- authenticated loading state
+- error state when the API fails
+- linked cards that reopen the map with `dest` query parameters
+
+### `/profile` Profile
+
+`src/pages/Profile.tsx` combines Clerk account information with app-specific data.
+
+It shows:
+
+- Clerk avatar, display name, and primary email
+- saved locations count
+- recent searches count
+- recent location list
+- saved location list
+- buttons for Clerk account management and sign-out
+
+### `/settings` Settings
+
+`src/pages/Settings.tsx` manages app preferences and some browser permission flows.
+
+Current settings behavior includes:
+
+- theme preference persisted in `localStorage`
+- email updates toggle persisted in `localStorage`
+- push notification toggle with browser permission handling
+- location services toggle with browser permission handling
+- hash-based deep linking from header buttons such as `/settings#notifications`
+
+## 9. Shared Layout And Navigation Chrome
+
+The shared shell lives in `src/components/Layout.tsx`.
+
+It provides:
+
+- collapsible desktop sidebar
+- responsive top bar with search and account actions
 - mobile bottom navigation
+- route-aware active navigation styles
+- map-page-specific hiding of top chrome when the map requests more viewport space
 
-### 7.1 Sidebar
+The layout also bridges page-to-shell communication through a `map-chrome-visibility` custom event so the map can temporarily hide header chrome during focused navigation.
 
-The sidebar:
+## 10. Authentication Model
 
-- can collapse and expand
-- tracks the current route with `useLocation`
-- highlights the active page
-- contains links to Dashboard, Campus Map, Saved, and Profile
-- contains a settings link at the bottom
+Clerk is used on both client and server.
 
-The open/closed state is stored in local React state inside `Layout`.
+### Frontend
 
-### 7.2 Top Bar
+- `ClerkProvider` is configured in `src/main.tsx`
+- pages use hooks such as `useAuth`, `useUser`, and `useClerk`
+- signed-out screens show `SignInButton` call-to-actions
+- profile and account controls use Clerk-hosted UI components
 
-The top bar:
+### Backend
 
-- is fixed at the top
-- changes width depending on whether the sidebar is open
-- contains a desktop search form
-- routes submitted searches to `/map?q=...`
-- shows notification, settings, and profile affordances
+- `server/index.ts` installs `clerkMiddleware`
+- authenticated routes call `requireUserId(req, res)`
+- unauthorized access returns `401` with `{ error: string }`
 
-### 7.3 Bottom Navigation
+## 11. API Surface
 
-On mobile, the app uses a bottom navigation bar with:
+The Express server currently exposes these main endpoints.
 
-- Explore
-- Search
-- Saved
-- Profile
+### Health
 
-This keeps the app usable without the desktop sidebar.
+- `GET /api/health`
 
-### 7.4 Main Content Container
+### Walking navigation
 
-The content area:
+- `POST /api/navigation/route`
 
-- adds top padding so fixed headers do not overlap content
-- adds bottom padding on mobile for the bottom nav
-- shifts left padding depending on sidebar width
+Request body:
 
-This is the reason pages can stay focused on feature content instead of layout plumbing.
+- `start: [number, number]`
+- `destinationBuildingId: string`
+- `roomId?: string | null`
 
-## 8. Styling Techniques
+### Shuttle
 
-The visual system is defined in `src/index.css`.
+- `GET /api/shuttle/overview`
+- `GET /api/shuttle/routes`
+- `GET /api/shuttle/vehicles`
+- `GET /api/shuttle/alerts`
 
-### 8.1 Tailwind CSS v4
+### Saved locations
 
-The app uses Tailwind CSS v4 through:
+- `GET /api/saved-locations`
+- `POST /api/saved-locations`
+- `DELETE /api/saved-locations/:buildingId`
 
-- `@import "tailwindcss";`
-- the Vite Tailwind plugin in `vite.config.ts`
+### Recent locations
 
-### 8.2 Design Tokens
+- `GET /api/recent-locations`
+- `POST /api/recent-locations`
 
-The CSS file defines theme tokens such as:
+### Schedule
 
-- surface colors
-- text colors
-- primary, secondary, tertiary colors
-- outline colors
-- layered container surfaces
-- headline, body, and label fonts
+- `GET /api/schedule`
+- `POST /api/schedule`
+- `POST /api/schedule/bulk`
+- `PATCH /api/schedule/:entryId`
+- `DELETE /api/schedule/:entryId`
 
-This is a strong technique because it separates design intent from component markup. Components can refer to semantic colors like `bg-surface-container` rather than hard-coded hex values.
+## 12. Persistence Model
 
-### 8.3 Typography
+The Prisma schema currently defines three authenticated data models.
 
-The project imports:
+### `SavedLocation`
 
-- `Space Grotesk` for headlines
-- `Manrope` for body and label text
-
-This creates a distinct visual identity compared with default browser or generic system fonts.
-
-### 8.4 Dark Mode
-
-Dark mode is handled by toggling a `dark` class on the root document element. The CSS defines alternate token values under `.dark`.
-
-Important implementation detail:
-
-- the theme is applied in `Settings.tsx`
-- the choice is not currently persisted in `localStorage`
-- on refresh, the initial state checks whether the root element already contains `dark`
-
-So the theme system exists, but it is not yet a fully persistent preference system.
-
-### 8.5 Reusable Visual Utilities
-
-The stylesheet defines:
-
-- `.glass-panel`
-- `.glass-panel-heavy`
-
-These utilities create layered card styles used across pages.
-
-### 8.6 Map and Motion Styling
-
-The map page adds local styles for:
-
-- animated dashed route lines
-- hidden scrollbars
-- hiding attribution on small screens
-
-The UI also uses motion-like utility classes such as fade-ins and slide-ins to make transitions feel more alive.
-
-## 9. Data Model
-
-The data model lives in `src/data/buildings.ts`.
-
-### 9.1 Types
-
-The file defines:
-
-- `BuildingType = "academic" | "service" | "parking"`
-- `BuildingTag = "study" | "dining" | "parking"`
-- `Room`
-- `Building`
-
-### 9.2 `Room` Shape
-
-A room contains:
+Fields:
 
 - `id`
-- `name`
-- `floor`
-- `desc`
-
-### 9.3 `Building` Shape
-
-A building contains:
-
-- `id`
-- `name`
-- `type`
-- `tags`
-- `lat`
-- `lng`
-- `desc`
-- `rooms`
-
-### 9.4 Dataset Characteristics
-
-The current dataset is hard-coded and includes:
-
-- academic buildings
-- student service buildings
-- recreation and arena locations
-- transit hub
-- parking garages
-
-This is useful for a prototype because:
-
-- the app has no API dependency
-- the dataset is easy to inspect and extend
-- search and routing behavior can be demonstrated deterministically
-
-The tradeoff is that all campus content must be maintained manually.
-
-## 10. State and Persistence Strategy
-
-The app mainly uses component-local React state plus browser `localStorage`.
-
-### 10.1 `localStorage` Keys
-
-Two important persisted keys are used:
-
-- `usf_saved_locations`
-- `usf_last_known_location`
-
-### 10.2 Saved Locations
-
-Saved locations are building IDs stored as a string array:
-
-```json
-["lib", "msc", "rec"]
-```
+- `userId`
+- `buildingId`
+- `createdAt`
+- `updatedAt`
 
 Behavior:
 
-- initialized in `Map.tsx`
-- read in `Saved.tsx`
-- updated whenever the user bookmarks or unbookmarks a destination
-- defaults to `["lib"]` when nothing is stored yet on the map page
+- unique on `[userId, buildingId]`
+- used by map, saved page, and profile page
 
-### 10.3 Last Known Location
+### `RecentSearch`
 
-The last known user location is stored as a coordinate tuple:
+Fields:
 
-```json
-[28.05948, -82.41228]
-```
+- `id`
+- `userId`
+- `query`
+- `fingerprint`
+- `buildingId`
+- `roomId`
+- `createdAt`
+- `updatedAt`
 
 Behavior:
 
-- read in the dashboard when the app loads
-- written when dashboard geolocation succeeds
-- written when map navigation receives updated geolocation
+- unique on `[userId, fingerprint]`
+- upserted when users select buildings or rooms on the map
+- trimmed server-side to the latest eight entries
 
-This gives the app a graceful fallback when live location is not immediately available.
+### `ScheduleEntry`
 
-## 11. Navigation Math and Core Logic
+Fields:
 
-The navigation logic is implemented in `src/lib/navigation.ts`.
-
-This file is the most important logic layer in the project.
-
-### 11.1 Coordinate Model
-
-Coordinates use:
-
-```ts
-type Coordinates = [number, number];
-```
-
-The app stores them in `[latitude, longitude]` order.
-
-### 11.2 Campus Center
-
-The fallback center point is:
-
-```ts
-CAMPUS_CENTER = [28.06, -82.413]
-```
-
-This is used when:
-
-- no building is selected
-- no live user location is available
-- no saved location is available
-
-### 11.3 Distance Calculation
-
-`getDistanceMeters(start, end)` uses the Haversine formula.
-
-This is a strong choice because:
-
-- latitude/longitude are spherical coordinates
-- Euclidean distance in degrees would be inaccurate
-- Haversine is simple and appropriate for short campus-scale estimates
-
-The function:
-
-1. converts degree values to radians
-2. computes latitude and longitude deltas
-3. applies the Haversine formula
-4. returns a meter distance using earth radius `6371000`
-
-### 11.4 Bearing Calculation
-
-`getBearing(start, end)` computes the directional bearing from one point to another.
-
-This is later translated into human-readable text like:
-
-- north
-- northeast
-- east
-
-### 11.5 Cardinal Direction Mapping
-
-`getCardinalDirection(bearing)` splits the compass into eight directions:
-
-- north
-- northeast
-- east
-- southeast
-- south
-- southwest
-- west
-- northwest
-
-This is used to make route instructions easier to read.
-
-### 11.6 Distance Formatting
-
-`formatDistance(distanceMeters)` returns:
-
-- rounded meters when distance is under 1000
-- kilometers with one decimal place when distance is 1000 or more
-
-Examples:
-
-- `245` -> `245 m`
-- `1530` -> `1.5 km`
-
-### 11.7 ETA Formatting
-
-`formatEta(minutes)` returns:
-
-- `X min` or `X mins` for under 60 minutes
-- `X hr` or `X hrs`
-- `X hr Y min`
-- `Unwalkable` when the time exceeds the walkability threshold
-
-### 11.8 Walkability Threshold
-
-`MAX_WALKABLE_MINUTES` is set to:
-
-```ts
-24 * 60
-```
-
-This means the app labels routes as unwalkable only if they exceed 24 hours.
-
-For a campus-scale app, that is effectively always walkable in practice. It behaves more like a very high safety ceiling than a realistic campus rule.
-
-### 11.9 ETA Estimation Formula
-
-`estimateWalkingMinutes(distanceMeters)` uses these constants:
-
-- `BASE_WALKING_SPEED_METERS_PER_MINUTE = 78`
-- `PATH_EFFICIENCY_BUFFER = 1.08`
-- `INTERSECTION_DELAY_MINUTES = 0.35`
-- `START_BUFFER_MINUTES = 0.4`
-
-The formula is:
-
-1. multiply distance by `1.08` to simulate non-perfect walking paths
-2. divide by `78` meters per minute to get moving time
-3. add crossing delay based on distance
-4. add a startup delay
-5. round the result and clamp to at least 1 minute
-
-Crossing delay logic:
-
-- `Math.floor(distance / 260) * 0.35`
-- capped at `2` minutes total
-
-Startup delay logic:
-
-- `0.4` minutes if distance is over `120m`
-- otherwise `0.2` minutes
-
-This is a thoughtful heuristic approach. It is lightweight, understandable, and more realistic than pure straight-line speed alone.
-
-### 11.10 Route Construction
-
-`buildRoute(start, end)` is the core route builder.
-
-It does not use:
-
-- sidewalks
-- roads
-- paths from OpenStreetMap
-- graph search algorithms like Dijkstra or A*
-
-Instead, it builds a simple L-shaped route:
-
-1. compare latitude delta and longitude delta
-2. if latitude delta is larger, move vertically first
-3. otherwise move horizontally first
-4. create a waypoint using one coordinate from start and one from end
-5. include the waypoint only if the first segment is more than 5 meters
-6. return `[start, waypoint?, end]`
-
-This route is easy to render on a map and gives users a believable directional preview without requiring a true routing engine.
-
-### 11.11 Effective Distance
-
-Inside `buildRoute`, the function computes:
-
-- direct distance
-- routed distance
-- effective distance
-
-`effectiveDistance` is:
-
-- the routed distance, or
-- direct distance times the path buffer,
-
-whichever is larger.
-
-This helps avoid unrealistically optimistic ETAs.
-
-### 11.12 Instruction Generation
-
-The function generates route steps like:
-
-- `Head north for 180 m.`
-- `Then continue east for 95 m.`
-
-Rules:
-
-- first step is only included if the first leg is over 10 meters
-- second step is only included if the second leg is over 10 meters
-
-This avoids noisy, low-value instructions on tiny segments.
-
-### 11.13 Current Route Data Shape
-
-`buildRoute()` returns:
-
-- `route`
-- `totalDistance`
-- `etaMinutes`
-- `isWalkable`
-- `steps`
-
-This return structure is what powers the map line, ETA badges, walkability labels, and directions panel.
-
-## 12. Important Logic Detail: Current ETA Quirk
-
-One important implementation detail should be documented clearly.
-
-`buildRoute()` computes an `effectiveDistance`, and then `estimateWalkingMinutes()` applies `PATH_EFFICIENCY_BUFFER` again internally.
-
-That means the current ETA path can effectively be buffered twice in some cases:
-
-1. once when `effectiveDistance` is chosen
-2. again inside `estimateWalkingMinutes`
-
-Also:
-
-- `routeData.totalDistance` represents the polyline distance
-- `routeData.etaMinutes` is based on `effectiveDistance`
-
-So the ETA can be based on a larger value than the displayed route distance.
-
-This is not necessarily wrong for a prototype, but it is important to describe it honestly because it affects how the numbers should be interpreted.
-
-## 13. Dashboard Page Logic
-
-The dashboard is implemented in `src/pages/Dashboard.tsx`.
-
-### 13.1 Main Responsibilities
-
-The page:
-
-- introduces the app
-- provides a hero search
-- shows quick destination cards
-- shows ETA-aware campus activity cards
-- attempts to obtain the user location
-
-### 13.2 Location State Strategy
-
-The dashboard creates a `locationState` with:
-
-- `currentLocation`
-- `source`
-
-Possible sources:
-
-- `live`
-- `saved`
-- `campus`
-
-Initialization logic:
-
-1. read stored last-known location from `localStorage`
-2. if present, use it and mark source as `saved`
-3. otherwise use `CAMPUS_CENTER` and mark source as `campus`
-
-Then, in a `useEffect`, the page tries live geolocation. If successful:
-
-- it sets the current location to the live GPS coordinates
-- changes source to `live`
-- stores the location for future sessions
-
-If geolocation fails, the page keeps the fallback state.
-
-### 13.3 Search Flow
-
-The dashboard search:
-
-- routes to `/map?q=...` when the input is non-empty
-- routes to `/map` when empty
-
-On mobile, clicking the large search form sends the user to the map screen instead of forcing inline typing in the dashboard.
-
-### 13.4 Quick Destination ETA Cards
-
-`QUICK_DESTINATIONS` is a curated list of building IDs. For each card:
-
-1. the page looks up the building
-2. computes a route from the current location
-3. displays `formatEta(route.etaMinutes)`
-4. links to `/map?dest=...&navigate=1`
-
-This is a good example of reusing the central routing logic outside the map page.
-
-### 13.5 Current Activity Cards
-
-The activity cards are also backed by real route estimation. They use fixed destination IDs such as:
-
-- `msc`
-- `fletcher-hub`
-
-Each card links into the map with navigation pre-armed.
-
-## 14. Map Page Logic
-
-The map page in `src/pages/Map.tsx` is the most feature-rich screen in the project.
-
-### 14.1 Main Responsibilities
-
-It handles:
-
-- searching buildings and rooms
-- filtering by campus use case
-- selecting map markers
-- displaying building detail cards
-- saving destinations
-- starting and stopping geolocation-based navigation
-- drawing a route polyline
-- reading URL query parameters
-
-### 14.2 URL Query Parameters
-
-The map supports these search parameters:
-
-- `dest`
-- `q`
+- `id`
+- `userId`
+- `course`
 - `room`
-- `navigate`
+- `buildingId`
+- `dayOfWeek`
+- `startTime`
+- `endTime`
+- `createdAt`
+- `updatedAt`
 
-Their meanings are:
+Behavior:
 
-- `dest`: building ID to preselect
-- `q`: search text to preload
-- `room`: room ID to highlight inside the selected building
-- `navigate=1`: automatically attempt to start navigation
+- powers the dashboard planner
+- supports create, update, delete, and bulk import
+- validated using shared schedule utilities
 
-This is a strong design technique because it makes the map page linkable and stateful through the URL instead of depending only on in-memory state.
+## 13. Building Data Model
 
-### 14.3 Local Component State
+`src/data/buildings.ts` is the canonical static campus dataset.
 
-Important state values include:
+The file provides:
 
-- `searchQuery`
-- `activeFilter`
-- `selectedBuilding`
-- `selectedRoom`
-- `isNavigating`
-- `isCardMinimized`
-- `userLocation`
-- `isLocatingUser`
-- `locationError`
-- `pendingAutoNavigate`
-- `savedLocations`
+- building IDs and names
+- coordinates
+- type and tag metadata
+- descriptions
+- room lists
+- primary entrance data
+- optional multi-entrance metadata used by the routing system
 
-This state is kept local because it is page-specific and does not yet justify a global store.
+This dataset is shared across multiple features:
 
-### 14.4 Search Logic
+- search matching
+- map markers
+- saved/profile labels
+- schedule routing targets
+- server-side entrance-aware arrival selection
 
-The search pipeline works like this:
+## 14. Walking Navigation System
 
-1. start from `BUILDINGS`
-2. optionally filter by `activeFilter`
-3. for each building:
-   - check whether the building name includes the query
-   - find rooms whose name, description, or floor includes the query
-4. keep entries where either the building matches or at least one room matches
+Walking directions are now primarily server-driven.
+
+### Client responsibilities
+
+The client:
+
+- requests a route from `/api/navigation/route`
+- renders the returned polyline and turn list
+- watches user location during navigation
+- estimates progress against the polyline
+- reroutes when movement is meaningful or the user is off-route
+- stores the latest known location in `localStorage`
+
+### Server responsibilities
+
+`server/navigation.ts` handles:
+
+- request validation
+- OpenRouteService API calls
+- conversion from ORS response format to app response format
+- entrance candidate evaluation
+- room-aware entrance preference scoring
+- arrival instruction text generation
+- route bounds generation
+- short-lived in-memory caching
 
 Important implementation details:
 
-- search is case-insensitive
-- building matching is based on building name only
-- room matching checks `name`, `desc`, and `floor`
-- building description is not used for building search matching
+- routes target building entrances rather than just building centers
+- the chosen entrance may vary by approach side and room hints
+- arrival coordinates can be nudged inward from the entrance for a better endpoint
+- route responses include `coordinates`, `distanceMeters`, `durationMinutes`, `steps`, and `bounds`
 
-### 14.5 Filter Logic
+## 15. Shuttle Integration
 
-The map includes quick filters for:
+Bull Runner data is normalized in `server/passio.ts`.
 
-- dining
-- parking
-- study
+The server combines several upstream Passio calls to produce a single frontend-friendly snapshot containing:
 
-These filters operate on `Building.tags`, not on `Building.type`.
+- system metadata
+- routes
+- route polylines
+- route stops
+- active vehicles
+- alerts
+- service time strings
 
-That means:
+The frontend never talks to Passio directly. It only consumes normalized API responses from the local server.
 
-- a building with type `service` can still appear in `study` if tagged that way
-- buildings without tags are hidden when a filter is active
+Benefits of this approach:
 
-### 14.6 Building Selection
+- external payload weirdness stays on the server
+- client types remain stable
+- route colors, stops, and vehicle counts are normalized once
+- E2E tests can mock a single clean API surface
 
-A building can be selected by:
+## 16. Schedule System
 
-- URL parameter
-- search result click
-- room result click
-- map marker click
+The schedule planner is spread across the dashboard UI, shared schedule utilities, the Prisma model, and schedule API routes.
 
-When selected, the page:
+Capabilities currently implemented:
 
-- shows the building detail card
-- centers the map on that building
-- increases map zoom
+- add, edit, and delete class entries
+- bulk import entries from parsed text
+- export schedule-friendly data from the dashboard UI
+- detect overlapping classes
+- render desktop and mobile planner views
+- drag schedule entries between time slots
+- create route targets from building and room labels
 
-### 14.7 Room Selection
+`src/lib/schedule.ts` is the shared logic layer for:
 
-If a room is selected:
+- time parsing
+- day validation
+- overlap detection
+- duration calculations
+- timeline row generation
+- legacy slot compatibility helpers
+- option generation for schedule forms
 
-- it is highlighted in the building details card
-- the card shows an arrival sentence that includes the room and floor
+## 17. User Preferences And Local Persistence
 
-If no room is selected:
+Not all persistence goes through the backend.
 
-- the arrival message targets the building itself
+### Local storage keys used by the client
 
-### 14.8 Saved Locations
+- theme preference
+- push updates enabled flag
+- email updates enabled flag
+- location services enabled flag
+- last known user location
+- dashboard schedule collapsed state
+- recent destination update timestamp bridge
+- voice guidance toggle on the map
 
-The map page owns the bookmark toggle behavior:
+This split is intentional:
 
-- if the building ID is already saved, remove it
-- otherwise append it
+- account-specific content goes to the database
+- device/browser-specific preferences stay local
 
-The saved list is persisted with a `useEffect` that writes to `localStorage` whenever `savedLocations` changes.
+## 18. Error Handling Strategy
 
-### 14.9 Geolocation Start Flow
+The codebase follows a simple but consistent error model.
 
-When the user presses `Start Route`:
+### Frontend
 
-1. the page verifies that a building is selected
-2. the page verifies geolocation support
-3. it sets loading state
-4. it calls `navigator.geolocation.getCurrentPosition`
-5. if successful:
-   - `userLocation` is set
-   - `isNavigating` becomes `true`
-6. if it fails:
-   - an error message is shown
-   - navigation does not start
+- `src/lib/api.ts` turns failed fetches into `Error` objects with useful messages
+- network-unavailable errors are translated into local dev guidance
+- pages store request errors in component state and render friendly messages
+- geolocation failures are mapped to explicit user-facing strings
 
-### 14.10 Continuous Location Tracking
+### Backend
 
-Once `isNavigating` is `true`, a `useEffect` starts `watchPosition`.
+- async handlers are wrapped through `asyncHandler`
+- invalid input returns 4xx JSON errors
+- domain-specific routing failures use `NavigationError`
+- uncaught errors fall through to a final `500` handler
 
-This means:
+## 19. Testing Strategy
 
-- the map can follow updated user position
-- the route can be recalculated from the latest coordinates
-- location is tracked continuously until navigation stops
+The repository uses Playwright for browser-level coverage.
 
-When navigation ends or the component unmounts:
+Current coverage includes:
 
-- `clearWatch` is called
+- dashboard search handoff and shuttle summary
+- map search and room drill-down
+- guide and empty-state behavior on the map
+- signed-out saved/profile flows
+- signed-in saved/profile flows
+- schedule CRUD flows
+- settings localStorage persistence
+- mobile navigation behavior
 
-This is the correct cleanup technique for browser geolocation watchers.
+Important test design choices:
 
-### 14.11 Auto-Navigation Flow
+- the Playwright suite starts `npm run dev:client:e2e`
+- tests do not depend on the Express API by default
+- Clerk is mocked in `e2e` mode
+- shuttle and account APIs are mocked at the browser layer
+- external map tiles are blocked in tests
 
-When the page is opened with `navigate=1`, it does not immediately call geolocation in the URL parsing effect. Instead:
+There is currently no unit-test runner such as Vitest or Jest.
 
-1. it sets `pendingAutoNavigate`
-2. another effect waits until the selection state is ready
-3. then it triggers `startNavigation()`
+## 20. Build, Run, And Verification Commands
 
-This is a good React sequencing technique because it avoids trying to navigate before the selected destination exists.
+Common commands:
 
-### 14.12 Route Rendering
+- `npm run dev`
+- `npm run dev:client`
+- `npm run dev:server`
+- `npm run build`
+- `npm run preview`
+- `npm run start`
+- `npm run lint`
+- `npm run test:e2e`
+- `npm run test:e2e -- tests/e2e/map.spec.ts`
+- `npm run test:e2e -- --project=chromium tests/e2e/map.spec.ts`
+- `npm run test:load:health`
+- `npm run test:passio -- --system=2343 --raw`
 
-If these conditions are all true:
+Important build note:
 
-- `isNavigating`
-- `userLocation`
-- `selectedBuilding`
+- `npm run build` builds only the frontend bundle
+- `npm run start` expects `dist/` to exist so the server can serve the SPA in production mode
 
-then the page:
+## 21. Current Strengths
 
-- calls `buildRoute(userLocation, destinationLocation)`
-- draws a `Polyline` using the returned route points
-- displays ETA, distance, walkability, and textual steps
+The present architecture works well for the current scope because it:
 
-### 14.13 Map Viewport Logic
+- keeps the UI polished and responsive
+- centralizes API access through typed helpers
+- uses a real backend where persistence and normalization matter
+- keeps browser-only preferences local
+- shares validation rules across client and server where appropriate
+- isolates third-party API complexity in server modules
+- provides realistic end-to-end test coverage for major flows
 
-The custom `MapUpdater` component handles map motion:
+## 22. Current Limitations
 
-- if route bounds exist, `fitBounds` is used
-- otherwise, `flyTo` centers on the current focal point
+The app is production-shaped, but several limitations still matter.
 
-This is cleaner than mixing imperative map commands directly into the main page body.
+- building and room metadata are still static and manually curated
+- schedule, saved, and recent data are user-specific but there is no broader admin CMS
+- walking routes depend on an external routing provider and do not include indoor navigation
+- accessibility-aware route scoring is not yet implemented
+- there are no unit tests for individual utility modules
+- the server is still concentrated in a single `server/index.ts` file rather than split into feature routers
 
-### 14.14 Map Click Behavior
+## 23. Best Extension Points
 
-`MapClickHandler` listens for map clicks. If a building card is open:
+The clearest future improvements are:
 
-- clicking the map minimizes the card
+1. move static campus metadata into a managed source of truth
+2. add richer room and accessibility metadata to the building dataset
+3. expand routing to include accessibility preferences and closure-aware rerouting
+4. split server routes into dedicated modules if the API grows much further
+5. add unit tests around schedule parsing, route tracking, and server normalization
+6. add caching or rate-limiting strategy around external upstream services
+7. extend shuttle history and analytics if product needs become more operational
 
-This improves usability on smaller screens because the map becomes easier to inspect without fully losing context.
+## 24. Conclusion
 
-### 14.15 Error Handling
+Campus Navigation Assistant is now a real full-stack campus application rather than a frontend-only demo. Its core value comes from combining a strong map UX with authenticated persistence, live shuttle visibility, and server-generated walking directions.
 
-The page translates geolocation browser error codes into user-friendly messages:
+The most important architectural idea in the current codebase is the division of responsibility:
 
-- permission denied
-- position unavailable
-- timeout
-- unknown fallback
+- static campus metadata stays local and fast
+- account-specific data lives in PostgreSQL through Prisma
+- auth stays delegated to Clerk
+- live transit and routing integrations are normalized on the server
+- the frontend focuses on presentation, interaction, and client-side map behavior
 
-This is a good UX practice because raw browser errors are too technical for end users.
-
-## 15. Leaflet Integration Techniques
-
-The project uses `react-leaflet` for React-friendly map composition.
-
-### 15.1 `MapContainer`
-
-The map root is a `MapContainer` centered on campus with zoom level `16`.
-
-### 15.2 OpenStreetMap Tiles
-
-The map loads standard OpenStreetMap raster tiles via:
-
-`https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png`
-
-### 15.3 Marker Strategy
-
-Markers are rendered for all buildings that pass the active filter.
-
-The page also renders a separate user location marker when available.
-
-### 15.4 Custom Marker Icons
-
-The app uses `L.divIcon` rather than default Leaflet pin assets.
-
-Benefits:
-
-- full control over styling
-- selected-state visuals
-- better match with the app theme
-- no need to manage static marker image files
-
-### 15.5 Selected Marker Styling
-
-The selected building marker changes appearance through a custom icon factory:
-
-- highlighted background
-- different border
-- glow/shadow
-- slight scale increase
-
-This makes building selection visually obvious.
-
-## 16. Saved Page Logic
-
-The saved page in `src/pages/Saved.tsx` is intentionally simple.
-
-### 16.1 Behavior
-
-On mount, it:
-
-1. reads `usf_saved_locations`
-2. parses the stored building IDs
-3. filters `BUILDINGS` against those IDs
-4. renders cards for saved buildings
-
-### 16.2 Empty State
-
-If no saved buildings exist, the page shows:
-
-- an empty-state message
-- a call-to-action link to `/map`
-
-### 16.3 Card Content
-
-Each saved card shows:
-
-- an icon
-- building type
-- name
-- description
-- directory item count
-- a navigate link
-
-### 16.4 Current Design Limitation
-
-This page only reads saved state on mount. If saved locations are changed elsewhere while the page stays mounted, it does not subscribe to storage events or re-read automatically.
-
-## 17. Profile Page Logic
-
-`src/pages/Profile.tsx` is a presentational screen.
-
-It currently acts as a mock profile dashboard and includes:
-
-- user avatar and summary
-- sample academic identity
-- example stats
-- current classes preview
-
-There is no backend connection, authentication system, or editable profile persistence yet.
-
-## 18. Settings Page Logic
-
-`src/pages/Settings.tsx` provides a UI for preferences.
-
-### 18.1 Theme Handling
-
-The page stores theme mode in component state:
-
-- `light`
-- `dark`
-- `system`
-
-An effect applies the result to `document.documentElement.classList`.
-
-### 18.2 Other Controls
-
-The remaining settings sections are currently UI-only:
-
-- notifications
-- privacy and security
-- account data button
-
-They look product-ready, but are not yet wired to persistent behavior.
-
-## 19. Search and Navigation User Journey
-
-A typical user flow looks like this:
-
-1. user lands on the dashboard
-2. dashboard tries to acquire live geolocation
-3. user clicks a quick destination or searches for a place
-4. app routes to `/map`
-5. map preloads the destination or search query from the URL
-6. user selects a building or room
-7. user optionally saves the building
-8. user starts navigation
-9. map obtains live location
-10. app draws a route and displays walking instructions
-
-This journey is fully client-side and does not require a backend round-trip.
-
-## 20. Why the Current Architecture Works Well
-
-This project uses a pragmatic architecture that fits its current scope.
-
-### Strengths
-
-- easy to run locally
-- easy to understand for reviewers and teammates
-- no backend required for core demo experience
-- routing logic is centralized
-- data types are explicit
-- UI is responsive and polished
-- URL-driven state makes deep linking possible
-
-### Why Local State Is Acceptable Here
-
-There is no heavy cross-page synchronization requirement yet. Because of that, using local React state is simpler and more maintainable than introducing Redux, Zustand, or Context-based global state prematurely.
-
-## 21. Current Limitations
-
-The project is strong as a prototype, but several limitations are important to acknowledge.
-
-### Data Limitations
-
-- campus buildings are manually hard-coded
-- there is no API or CMS
-- there is no live shuttle, event, or campus operations feed
-
-### Routing Limitations
-
-- routes are heuristic, not map-network aware
-- there is no sidewalk graph or obstacle avoidance
-- there is no indoor navigation
-- there is no accessible routing logic
-- there is no rerouting based on closures or live path conditions
-
-### Persistence Limitations
-
-- theme is not persisted
-- saved page does not reactively sync after mount
-- profile/settings data is not backed by a server
-
-### Product Limitations
-
-- profile and settings are mostly demo surfaces
-- the "Guide" quick filter button is presentational
-- campus stats are static display values
-
-## 22. Opportunities for Improvement
-
-If this project is extended, the strongest next steps would be:
-
-1. replace static building data with an API or campus GIS feed
-2. move route generation to a graph-based routing model
-3. persist theme preference in `localStorage`
-4. add authentication and real user profiles
-5. make saved locations reactive across pages and tabs
-6. add accessibility-aware route scoring
-7. support transit layers and live shuttle positions
-8. add analytics for common destinations and search behavior
-
-## 23. Build and Configuration Notes
-
-### 23.1 Vite Config
-
-`vite.config.ts`:
-
-- enables React and Tailwind plugins
-- defines `process.env.GEMINI_API_KEY`
-- sets an `@` alias to the project root
-- conditionally disables HMR with `DISABLE_HMR`
-
-### 23.2 TypeScript Config
-
-`tsconfig.json`:
-
-- targets `ES2022`
-- uses `moduleResolution: "bundler"`
-- enables `jsx: "react-jsx"`
-- uses `noEmit: true`
-- defines path alias support for `@/*`
-
-### 23.3 Environment File
-
-`.env.example` includes:
-
-- `GEMINI_API_KEY`
-- `APP_URL`
-
-At the moment, these are scaffold-level placeholders rather than active feature dependencies in the checked-in frontend flow.
-
-## 24. Exact Logic Summary by File
-
-### `src/main.tsx`
-
-- bootstraps React
-- mounts the app
-
-### `src/App.tsx`
-
-- defines routes
-- wraps pages in shared layout
-
-### `src/components/Layout.tsx`
-
-- provides app shell
-- handles navigation links
-- supports responsive desktop/mobile chrome
-
-### `src/data/buildings.ts`
-
-- defines campus content and domain types
-
-### `src/lib/navigation.ts`
-
-- computes distances
-- computes bearings
-- formats ETA and distance
-- estimates walking time
-- builds heuristic L-shaped routes
-- persists last-known user location
-
-### `src/pages/Dashboard.tsx`
-
-- gets initial user location
-- shows hero search
-- renders quick destinations with ETA
-- links into map flows
-
-### `src/pages/Map.tsx`
-
-- manages map interactions
-- parses URL state
-- searches buildings and rooms
-- filters locations
-- starts/stops navigation
-- draws live route previews
-- saves destinations
-
-### `src/pages/Saved.tsx`
-
-- displays bookmarked buildings
-
-### `src/pages/Profile.tsx`
-
-- presents a profile demo page
-
-### `src/pages/Settings.tsx`
-
-- applies theme choice
-- presents settings UI
-
-## 25. Conclusion
-
-Campus Navigation Assistant is a clean, well-scoped React campus navigation prototype with a strong UI foundation and a surprisingly clear logic layer for its size.
-
-Its key technical idea is not "real-world routing accuracy." Its key idea is:
-
-- static but structured campus data
-- URL-driven navigation flows
-- browser geolocation
-- simple route heuristics
-- polished responsive presentation
-
-That combination makes it a very effective demo architecture:
-
-- simple enough to maintain
-- detailed enough to explain
-- visually strong enough to present
-- modular enough to grow into a more advanced campus navigation platform later
+That structure keeps the app understandable today while leaving room for the project to grow into a more advanced campus operations or navigation platform.

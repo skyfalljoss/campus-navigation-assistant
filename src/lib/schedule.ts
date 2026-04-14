@@ -265,7 +265,11 @@ export function buildScheduleTimelineTimes(entries: ScheduleTimeRangeLike[], buf
 
 export function buildScheduleVisibleTimeRows(entries: ScheduleTimeRangeLike[], extraPaddingSteps = 1) {
   if (entries.length === 0) {
-    return [DEFAULT_SCHEDULE_START_TIME];
+    const defaultStartMinutes = scheduleTimeToMinutes(DEFAULT_SCHEDULE_START_TIME) ?? 9 * 60 + 30;
+
+    return Array.from({ length: 3 }, (_, index) =>
+      scheduleMinutesToTime(defaultStartMinutes + index * SCHEDULE_DISPLAY_ROW_MINUTES)
+    );
   }
 
   const times = new Set<string>();

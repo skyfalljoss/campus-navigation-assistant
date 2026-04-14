@@ -27,6 +27,11 @@
   --color-tertiary-container: var(--tertiary-container);
   --color-on-tertiary-container: var(--on-tertiary-container);
 
+  --color-warning: var(--warning);
+  --color-on-warning: var(--on-warning);
+  --color-warning-container: var(--warning-container);
+  --color-on-warning-container: var(--on-warning-container);
+
   --color-surface-container-lowest: var(--surface-container-lowest);
   --color-surface-container-low: var(--surface-container-low);
   --color-surface-container: var(--surface-container);
@@ -60,6 +65,11 @@
     --tertiary-container: #FDE68A;
     --on-tertiary-container: #4E3D00;
 
+    --warning: #9F3A16;
+    --on-warning: #FFFFFF;
+    --warning-container: #FFDCD1;
+    --on-warning-container: #3B0C00;
+
     --surface-container-lowest: #FFFFFF;
     --surface-container-low: #F8F9FA;
     --surface-container: #F0F2F0;
@@ -91,6 +101,11 @@
     --on-tertiary: #131313;
     --tertiary-container: #cba72f;
     --on-tertiary-container: #4e3d00;
+
+    --warning: #FFB59A;
+    --on-warning: #5C1B00;
+    --warning-container: #c5952d;
+    --on-warning-container: #FFDCD1;
 
     --surface-container-lowest: #1c1b1b;
     --surface-container-low: #201f1f;

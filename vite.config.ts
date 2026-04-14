@@ -5,6 +5,8 @@ import {defineConfig, loadEnv} from 'vite';
 
 export default defineConfig(({mode}) => {
   const env = loadEnv(mode, '.', '');
+  const isE2E = mode === 'e2e';
+
   return {
     plugins: [react(), tailwindcss()],
     define: {
@@ -13,6 +15,7 @@ export default defineConfig(({mode}) => {
     resolve: {
       alias: {
         '@': path.resolve(__dirname, '.'),
+        ...(isE2E ? {'@clerk/clerk-react': path.resolve(__dirname, 'tests/mocks/clerk.tsx')} : {}),
       },
     },
     server: {

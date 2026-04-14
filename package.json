@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "concurrently -k -n API,WEB -c cyan,green \"npm:dev:server\" \"npm:dev:client\"",
     "dev:client": "vite --port=3000 --host=0.0.0.0",
+    "dev:client:e2e": "vite --mode e2e --port=3000 --host=0.0.0.0",
     "dev:server": "tsx server/index.ts",
     "build": "vite build",
     "start": "npm run prisma:migrate:deploy && npm run start:server",
@@ -13,6 +14,10 @@
     "preview": "vite preview",
     "clean": "rm -rf dist",
     "lint": "tsc --noEmit",
+    "test:e2e": "playwright test",
+    "test:e2e:headed": "playwright test --headed",
+    "test:e2e:install": "playwright install",
+    "test:load:health": "tsx scripts/load-health.ts",
     "test:passio": "tsx scripts/test-passio-api.ts",
     "prisma:generate": "prisma generate",
     "prisma:migrate:dev": "prisma migrate dev",
@@ -42,12 +47,14 @@
     "vite": "^6.2.0"
   },
   "devDependencies": {
+    "@playwright/test": "^1.54.2",
     "@types/cors": "^2.8.19",
     "@types/express": "^4.17.21",
     "@types/leaflet": "^1.9.21",
     "@types/node": "^22.14.0",
     "@types/react": "^19.0.10",
     "@types/react-dom": "^19.0.4",
+    "autocannon": "^8.0.0",
     "autoprefixer": "^10.4.21",
     "concurrently": "^9.2.1",
     "prisma": "^6.17.1",

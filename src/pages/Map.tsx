@@ -748,6 +748,7 @@ export default function MapPage() {
               </div>
               <button
                 onClick={closeGuide}
+                aria-label="Close map guide"
                 className="rounded-full bg-surface-container p-2 text-on-surface-variant hover:bg-surface-container-high transition-colors"
               >
                 <X className="w-4 h-4" />
@@ -1185,6 +1186,7 @@ export default function MapPage() {
                     <button 
                       onClick={() => { void toggleSave(selectedBuilding.id); }} 
                       disabled={pendingSaveId === selectedBuilding.id}
+                      aria-label={savedLocations.includes(selectedBuilding.id) ? "Remove saved location" : "Save location"}
                       className="p-3.5 rounded-xl bg-surface-container-high text-on-surface hover:bg-surface-variant transition-colors border border-outline-variant/20 disabled:opacity-60"
                     >
                       {savedLocations.includes(selectedBuilding.id) ? (

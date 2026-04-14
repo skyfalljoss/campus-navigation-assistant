@@ -105,6 +105,10 @@ function getRouteStops(route: ShuttleRouteRecord) {
   return route.stops ?? [];
 }
 
+function hasVehicleSpeed(vehicle: ShuttleVehicleRecord) {
+  return typeof vehicle.speed === "number" && Number.isFinite(vehicle.speed);
+}
+
 export default function ShuttlePage() {
   const [overview, setOverview] = useState<ShuttleOverviewRecord | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -414,10 +418,10 @@ export default function ShuttlePage() {
                         weight: 3,
                       }}
                     >
-                      <Popup>
-                        <div className="min-w-[160px]">
-                          <p className="font-bold">{stop.name}</p>
-                          <p className="text-sm">{selectedRoute?.name}</p>
+                      <Popup className="shuttle-map-popup">
+                        <div className="min-w-[160px] text-on-surface">
+                          <p className="font-bold text-on-surface">{stop.name}</p>
+                          {selectedRoute?.name ? <p className="text-sm text-on-surface-variant">{selectedRoute.name}</p> : null}
                         </div>
                       </Popup>
                     </CircleMarker>
@@ -428,12 +432,12 @@ export default function ShuttlePage() {
                       position={[vehicle.latitude, vehicle.longitude]}
                       icon={createVehicleIcon(vehicle.color)}
                     >
-                      <Popup>
-                        <div className="min-w-[180px]">
-                          <p className="font-bold">{vehicle.name}</p>
-                          <p className="text-sm">{vehicle.routeName}</p>
-                          <p className="text-sm">Speed: {vehicle.speed !== null ? `${Math.round(vehicle.speed)} mph` : "Unknown"}</p>
-                          <p className="text-xs text-slate-500 mt-2">{vehicle.latitude.toFixed(5)}, {vehicle.longitude.toFixed(5)}</p>
+                      <Popup className="shuttle-map-popup">
+                        <div className="min-w-[180px] text-on-surface">
+                          <p className="font-bold text-on-surface">{vehicle.name}</p>
+                          {vehicle.routeName ? <p className="text-sm text-on-surface-variant">{vehicle.routeName}</p> : null}
+                          {hasVehicleSpeed(vehicle) ? <p className="text-sm text-on-surface-variant">Speed: {Math.round(vehicle.speed)} mph</p> : null}
+                          <p className="mt-2 text-xs text-on-surface-variant">{vehicle.latitude.toFixed(5)}, {vehicle.longitude.toFixed(5)}</p>
                         </div>
                       </Popup>
                     </Marker>
@@ -513,7 +517,7 @@ export default function ShuttlePage() {
                           </div>
                           <span className="w-3 h-3 rounded-full shrink-0 mt-1" style={{ backgroundColor: vehicle.color ?? "var(--color-primary)" }} />
                         </div>
-                        <p className="text-xs text-on-surface-variant mt-3">Speed {vehicle.speed !== null ? `${Math.round(vehicle.speed)} mph` : "unknown"}</p>
+                        {hasVehicleSpeed(vehicle) ? <p className="mt-3 text-xs text-on-surface-variant">Speed {Math.round(vehicle.speed)} mph</p> : null}
                         <p className="text-xs text-on-surface-variant mt-1">
                           Service hours {routeLookup.get(vehicle.routeId)?.serviceTimeShort ?? "not listed"}
                         </p>

@@ -22,6 +22,8 @@ export const SCHEDULE_DISPLAY_ROW_MINUTES = 30;
 export const DEFAULT_SCHEDULE_START_TIME = "09:30";
 export const DEFAULT_SCHEDULE_END_TIME = "10:30";
 export const DEFAULT_SCHEDULE_DAY = "mon";
+export const SCHEDULE_OPTION_START_TIME = "07:00";
+export const SCHEDULE_OPTION_END_TIME = "22:00";
 
 export type ScheduleDay = (typeof SCHEDULE_DAYS)[number]["key"];
 
@@ -263,7 +265,11 @@ export function buildScheduleTimelineTimes(entries: ScheduleTimeRangeLike[], buf
 
 export function buildScheduleVisibleTimeRows(entries: ScheduleTimeRangeLike[], extraPaddingSteps = 1) {
   if (entries.length === 0) {
-    return [DEFAULT_SCHEDULE_START_TIME];
+    const defaultStartMinutes = scheduleTimeToMinutes(DEFAULT_SCHEDULE_START_TIME) ?? 9 * 60 + 30;
+
+    return Array.from({ length: 3 }, (_, index) =>
+      scheduleMinutesToTime(defaultStartMinutes + index * SCHEDULE_DISPLAY_ROW_MINUTES)
+    );
   }
 
   const times = new Set<string>();
@@ -299,19 +305,18 @@ export function getScheduleDisplayRowStart(value: string) {
 export function buildScheduleTimeOptions(entries: ScheduleTimeRangeLike[], extraPaddingSteps = 4) {
   const visibleTimeline = buildScheduleTimelineTimes(entries, extraPaddingSteps);
   const times = new Set<string>(visibleTimeline);
+  const optionStartMinutes = scheduleTimeToMinutes(SCHEDULE_OPTION_START_TIME) ?? 7 * 60;
+  const optionEndMinutes = scheduleTimeToMinutes(SCHEDULE_OPTION_END_TIME) ?? 22 * 60;
+
+  // Keep the planner grid compact, but let the form choose from the full day.
+  // Use 30-minute steps to keep the dropdown manageable while still preserving
+  // any existing entry times that are already in the schedule data.
+  for (let minute = optionStartMinutes; minute <= optionEndMinutes; minute += SCHEDULE_DISPLAY_ROW_MINUTES) {
+    times.add(scheduleMinutesToTime(minute));
+  }
+
   times.add(DEFAULT_SCHEDULE_START_TIME);
   times.add(DEFAULT_SCHEDULE_END_TIME);
-
-  if (entries.length > 0) {
-    const earliest = scheduleTimeToMinutes(visibleTimeline[0]);
-    const latest = scheduleTimeToMinutes(visibleTimeline[visibleTimeline.length - 1]);
-
-    if (earliest !== null && latest !== null) {
-      for (let minute = Math.max(0, earliest - extraPaddingSteps * SCHEDULE_TIME_STEP_MINUTES); minute <= Math.min(24 * 60, latest + extraPaddingSteps * SCHEDULE_TIME_STEP_MINUTES); minute += SCHEDULE_TIME_STEP_MINUTES) {
-        times.add(scheduleMinutesToTime(minute));
-      }
-    }
-  }
 
   return Array.from(times).sort(compareScheduleTimes);
 }

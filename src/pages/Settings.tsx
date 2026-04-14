@@ -15,15 +15,18 @@ function Toggle({
   checked,
   onToggle,
   disabled = false,
+  label,
 }: {
   checked: boolean;
   onToggle: () => void;
   disabled?: boolean;
+  label: string;
 }) {
   return (
     <button
       type="button"
       role="switch"
+      aria-label={label}
       aria-checked={checked}
       onClick={onToggle}
       disabled={disabled}
@@ -327,7 +330,7 @@ export default function SettingsPage() {
                         : " Enable them for this browser when prompted."}
                 </p>
               </div>
-              <Toggle checked={pushNotificationsEnabled} onToggle={() => void handlePushToggle()} disabled={isUpdatingPush || pushPermission === "unsupported"} />
+              <Toggle label="Push Notifications" checked={pushNotificationsEnabled} onToggle={() => void handlePushToggle()} disabled={isUpdatingPush || pushPermission === "unsupported"} />
             </div>
             {pushMessage ? <p className="text-sm text-on-surface-variant -mt-2">{pushMessage}</p> : null}
             <div className="h-[1px] w-full bg-outline-variant/20"></div>
@@ -338,7 +341,7 @@ export default function SettingsPage() {
                   Weekly newsletter and important announcements. This preference is saved on this device.
                 </p>
               </div>
-              <Toggle checked={emailUpdatesEnabled} onToggle={handleEmailToggle} />
+              <Toggle label="Email Updates" checked={emailUpdatesEnabled} onToggle={handleEmailToggle} />
             </div>
             <p className="text-sm text-on-surface-variant -mt-2">
               Email updates are currently <span className="font-semibold text-on-surface">{emailUpdatesEnabled ? "enabled" : "disabled"}</span>.
@@ -368,7 +371,7 @@ export default function SettingsPage() {
                         : " Enable it for this browser when prompted."}
                 </p>
               </div>
-              <Toggle checked={locationServicesActive} onToggle={() => void handleLocationToggle()} disabled={isUpdatingLocation || locationPermission === "unsupported"} />
+              <Toggle label="Location Services" checked={locationServicesActive} onToggle={() => void handleLocationToggle()} disabled={isUpdatingLocation || locationPermission === "unsupported"} />
             </div>
             <p className="text-sm text-on-surface-variant -mt-2">
               Location services are currently <span className="font-semibold text-on-surface">{locationServicesActive ? "enabled" : "disabled"}</span> for the app.

@@ -199,10 +199,68 @@ flowchart LR
 - `npm run start:server` starts only the production server process
 - `npm run preview` previews the built frontend
 - `npm run lint` runs TypeScript checks
+- `npm run test:e2e` runs the Playwright E2E suite against a frontend-only test server with mocked auth and mocked API responses
+- `npm run test:e2e:headed` runs the same E2E suite in headed mode
+- `npm run test:e2e:install` installs Playwright browsers locally
+- `npm run test:load:health` runs a lightweight `autocannon` load test against `/api/health`
 - `npm run prisma:generate` regenerates Prisma client
 - `npm run prisma:migrate:dev` runs database migrations
 - `npm run prisma:migrate:deploy` runs production-safe migrations
 - `npm run test:passio` runs the Passio test script
+
+## E2E Testing
+
+The repo now includes a Playwright suite under `tests/e2e`.
+
+- The E2E server uses `npm run dev:client:e2e`, so it starts only the Vite frontend.
+- Clerk is replaced with a local stub in `e2e` mode, which keeps the suite independent from real auth setup.
+- Shuttle requests are mocked in the browser, so the tests do not depend on the API server, Prisma, Passio, or OpenRouteService.
+
+Run locally:
+
+```bash
+npm run test:e2e:install
+npm run test:e2e
+```
+
+The current suite covers:
+
+- Dashboard rendering and route-search handoff to the map page
+- Map search, room selection, empty-state search, and guide dialog
+- Settings preferences stored in local storage
+- Signed-out states for saved locations and profile screens
+- Signed-in saved-location and profile flows with mocked Clerk auth
+- Signed-in schedule create, edit, and delete flows with mocked API state
+- Mobile-only coverage for bottom navigation and the header map-search shortcut
+
+Playwright projects currently run in:
+
+- Chromium desktop
+- Firefox desktop
+- WebKit desktop
+- Mobile Chrome
+
+## Load Testing
+
+Basic traffic testing is possible, but it should be kept separate from Playwright.
+
+- Use Playwright for correctness and user flows.
+- Use `npm run test:load:health` for simple throughput and latency checks against the Express server.
+- The default target is `http://127.0.0.1:4000/api/health`, which avoids Clerk, Prisma, Passio, and OpenRouteService dependencies.
+
+Run locally in two terminals:
+
+```bash
+npm run dev:server
+npm run test:load:health
+```
+
+Optional environment variables:
+
+- `LOAD_TEST_URL`
+- `LOAD_TEST_CONNECTIONS`
+- `LOAD_TEST_DURATION`
+- `LOAD_TEST_PIPELINING`
 
 ## Project Structure
 

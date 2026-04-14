@@ -2,9 +2,13 @@ node_modules/
 build/
 dist/
 coverage/
+playwright-report/
+playwright-results.xml
+test-results/
 .DS_Store
 *.log
 .env*
 !.env.example
+!.env.e2e
 
 docs/demo/*.mov

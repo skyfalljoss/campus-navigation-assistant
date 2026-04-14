@@ -11,6 +11,8 @@ import { subscribeToRecentDestinationsUpdates } from "../lib/recent-destinations
 import {
   DEFAULT_SCHEDULE_DAY,
   DEFAULT_SCHEDULE_END_TIME,
+  SCHEDULE_OPTION_END_TIME,
+  SCHEDULE_OPTION_START_TIME,
   DEFAULT_SCHEDULE_START_TIME,
   SCHEDULE_DAYS,
   buildScheduleTimeOptions,
@@ -387,7 +389,7 @@ function ScheduleDropCell({ cellId, dayLabel, timeLabel, isMobile = false, child
   return (
     <div
       ref={setNodeRef}
-      className={`group rounded-[18px] border p-1.5 transition-all ${isOver ? "border-primary/60 bg-primary/10 shadow-[0_0_0_1px_rgba(0,103,71,0.18),inset_0_0_0_1px_rgba(0,103,71,0.14)]" : "border-outline-variant/12 bg-surface-container-lowest/45"} ${isMobile ? "min-h-[88px]" : "min-h-[96px]"}`}
+      className={`group rounded-[18px] border p-1.5 transition-all ${isOver ? "border-primary/60 bg-primary/10 shadow-[0_0_0_1px_rgba(0,103,71,0.18),inset_0_0_0_1px_rgba(0,103,71,0.14)]" : "border-primary/12 bg-primary/[0.05] dark:border-outline-variant/12 dark:bg-surface-container-lowest/45"} ${isMobile ? "min-h-[88px]" : "min-h-[96px]"}`}
       aria-label={`Drop a class on ${dayLabel} at ${timeLabel}`}
     >
       {isOver ? (
@@ -411,9 +413,9 @@ function ScheduleCard({ entry, appearance, routeTarget, isConflict, isDragging =
     <div
       ref={setNodeRef}
       style={style}
-      className={`relative rounded-[16px] border shadow-[0_8px_18px_rgb(0,0,0,0.03)] transition-all ${compact ? "p-2.5" : "p-3.5"} ${appearance.cardClassName} ${isConflict ? "border-amber-400/70 bg-amber-500/12" : "border-outline-variant/14 dark:border-white/8 dark:bg-white/[0.045]"} ${isDragging ? "z-20 shadow-[0_18px_34px_rgba(0,0,0,0.16)] ring-2 ring-primary/20" : ""}`}
+      className={`relative rounded-[16px] border shadow-[0_8px_18px_rgb(0,0,0,0.03)] transition-all ${compact ? "p-2.5" : "p-3.5"} ${appearance.cardClassName} ${isConflict ? "border-warning/35 bg-warning-container/82" : "border-outline-variant/14 dark:border-white/8 dark:bg-white/[0.045]"} ${isDragging ? "z-20 shadow-[0_18px_34px_rgba(0,0,0,0.16)] ring-2 ring-primary/20" : ""}`}
     >
-      <span className={`absolute right-0 top-0 h-0 w-0 border-l-[12px] border-l-transparent border-t-[12px] ${isConflict ? "border-t-amber-400" : appearance.cornerClassName} opacity-80`} />
+      <span className={`absolute right-0 top-0 h-0 w-0 border-l-[12px] border-l-transparent border-t-[12px] ${isConflict ? "border-t-warning" : appearance.cornerClassName} opacity-80`} />
       <div className={`flex items-start justify-between ${compact ? "gap-2" : "gap-3"}`}>
         <button
           type="button"
@@ -461,11 +463,11 @@ function ScheduleCard({ entry, appearance, routeTarget, isConflict, isDragging =
         </div>
       </div>
       <div className={`flex flex-wrap items-center justify-between gap-2 border-t border-outline-variant/10 dark:border-white/6 ${compact ? "mt-2.5 pt-2" : "mt-3 pt-2.5"}`}>
-        <span className={`inline-flex items-center rounded-full border font-bold uppercase tracking-[0.16em] shadow-[inset_0_1px_0_rgba(255,255,255,0.08)] ${compact ? "px-2.5 py-1 text-[8px]" : "px-2.5 py-1 text-[9px]"} ${isConflict ? "border-amber-400/40 bg-amber-500/15 text-amber-700 dark:text-amber-300" : appearance.badgeClassName}`}>
+        <span className={`inline-flex items-center rounded-full border font-bold uppercase tracking-[0.16em] shadow-[inset_0_1px_0_rgba(255,255,255,0.08)] ${compact ? "px-2.5 py-1 text-[8px]" : "px-2.5 py-1 text-[9px]"} ${isConflict ? "border-warning/25 bg-warning/12 text-on-warning-container" : appearance.badgeClassName}`}>
           {isConflict ? "Conflict" : appearance.label}
         </span>
         {isConflict ? (
-          <span className={`inline-flex items-center gap-1 font-semibold text-amber-700 dark:text-amber-300 ${compact ? "text-[9px]" : "text-[10px]"}`}>
+          <span className={`inline-flex items-center gap-1 font-semibold text-on-warning-container ${compact ? "text-[9px]" : "text-[10px]"}`}>
             <AlertTriangle className="h-3 w-3" /> Overlaps another class
           </span>
         ) : null}
@@ -712,6 +714,18 @@ export default function Dashboard() {
 
   const scheduleTimeOptions = useMemo(() => buildScheduleTimeOptions(scheduleEntries), [scheduleEntries]);
 
+  const scheduleStartTimeOptions = useMemo(() => {
+    return scheduleTimeOptions.filter(
+      (time) => compareScheduleTimes(time, SCHEDULE_OPTION_START_TIME) >= 0 && compareScheduleTimes(time, SCHEDULE_OPTION_END_TIME) < 0
+    );
+  }, [scheduleTimeOptions]);
+
+  const scheduleEndTimeOptions = useMemo(() => {
+    return scheduleTimeOptions.filter(
+      (time) => compareScheduleTimes(time, SCHEDULE_OPTION_START_TIME) > 0 && compareScheduleTimes(time, SCHEDULE_OPTION_END_TIME) <= 0
+    );
+  }, [scheduleTimeOptions]);
+
   const activeDraggedEntry = useMemo(
     () => scheduleEntries.find((entry) => entry.id === activeDragEntryId) ?? null,
     [activeDragEntryId, scheduleEntries]
@@ -800,6 +814,8 @@ export default function Dashboard() {
     const uniqueDays = new Set(scheduleEntries.map((entry) => entry.dayOfWeek)).size;
     return `${scheduleEntries.length} class${scheduleEntries.length === 1 ? "" : "es"} across ${uniqueDays} day${uniqueDays === 1 ? "" : "s"}`;
   }, [isSignedIn, scheduleEntries]);
+
+  const isScheduleEmpty = scheduleEntries.length === 0;
 
   const estimateNote =
     locationState.source === "live"
@@ -1271,7 +1287,7 @@ export default function Dashboard() {
             <DndContext sensors={sensors} collisionDetection={closestCenter} onDragStart={handleScheduleDragStart} onDragEnd={(event) => { void handleScheduleDrop(event); }}>
               <>
                 {scheduleWarningMessage ? (
-                  <div className="mx-4 mt-4 rounded-2xl border border-amber-400/25 bg-amber-500/10 px-4 py-3 text-sm text-amber-800 dark:text-amber-200 md:mx-5">
+                  <div className="mx-4 mt-4 rounded-2xl border border-warning/35 bg-warning-container/88 px-4 py-3 text-sm text-on-warning-container md:mx-5">
                     <div className="flex items-start gap-2">
                       <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
                       <span>{scheduleWarningMessage}</span>
@@ -1296,7 +1312,7 @@ export default function Dashboard() {
                     {visibleScheduleRows.map((time) => {
                       const entries = scheduleEntriesByCell.get(getScheduleCellKey(selectedMobileScheduleDay, time)) ?? [];
                       return (
-                        <div key={`${selectedMobileScheduleDay}-${time}`} className="rounded-[18px] border border-outline-variant/16 bg-surface-container-lowest/70 p-2">
+                        <div key={`${selectedMobileScheduleDay}-${time}`} className="rounded-[18px] border border-primary/14 bg-primary/[0.065] p-2 shadow-[inset_0_1px_0_rgba(255,255,255,0.28)] dark:border-outline-variant/28 dark:bg-surface-container-low/85">
                           <div className="flex items-start gap-3">
                             <button
                               type="button"
@@ -1332,9 +1348,9 @@ export default function Dashboard() {
                                 <button
                                   type="button"
                                   onClick={() => openCreateScheduleModal(selectedMobileScheduleDay, time)}
-                                  className="flex min-h-[56px] w-full items-center justify-center rounded-[14px] border border-dashed border-outline/18 bg-transparent px-3 text-on-surface-variant/45 transition-all hover:border-outline/28 hover:bg-surface-container-low/40 hover:text-primary/75"
+                                  className="flex min-h-[56px] w-full items-center justify-center rounded-[14px] border border-dashed border-outline/32 bg-surface-container-lowest/65 px-3 text-on-surface-variant/70 transition-all hover:border-primary/30 hover:bg-surface-container hover:text-primary"
                                 >
-                                  <div className="flex items-center gap-2 opacity-70 transition-opacity group-hover:opacity-100">
+                                  <div className="flex items-center gap-2 opacity-90 transition-opacity group-hover:opacity-100">
                                     <Plus className="h-4 w-4" />
                                     <span className="text-[10px] font-semibold uppercase tracking-[0.16em]">Add</span>
                                   </div>
@@ -1369,22 +1385,22 @@ export default function Dashboard() {
                     <tbody>
                       {visibleScheduleRows.map((time) => (
                         <tr key={time}>
-                          <td className="border-r border-b border-outline-variant/18 bg-surface-container-low px-4 py-3.5 align-top">
+                          <td className="border-r border-b border-primary/20 bg-primary/[0.13] px-4 py-3.5 align-top dark:border-outline-variant/26 dark:bg-surface-container">
                             <button
                               type="button"
                               onClick={() => openCreateScheduleModal(DEFAULT_SCHEDULE_DAY, time)}
                               className="w-full text-left"
                             >
-                              <p className="font-headline text-[13px] font-bold leading-snug text-on-surface">
+                              <p className="font-headline text-[12px] font-bold leading-snug text-on-surface">
                                 {formatScheduleTimeLabel(time)} - {formatScheduleTimeLabel(scheduleMinutesToTime((scheduleTimeToMinutes(time) ?? 0) + 60))}
                               </p>
-                              <p className="mt-1 text-[9px] font-semibold uppercase tracking-[0.16em] text-primary/75">1 hour window</p>
+                              {/* <p className="mt-1 text-[9px] font-semibold uppercase tracking-[0.16em] text-primary/75">1 hour window</p> */}
                             </button>
                           </td>
                           {SCHEDULE_DAYS.map((day) => {
                             const entries = scheduleEntriesByCell.get(getScheduleCellKey(day.key, time)) ?? [];
                             return (
-                              <td key={`${day.key}-${time}`} className="border-r border-b border-outline-variant/18 bg-surface-container-lowest/70 p-1 align-top last:border-r-0 lg:p-1.5">
+                              <td key={`${day.key}-${time}`} className="border-r border-b border-primary/20 bg-primary/[0.105] p-1 align-top last:border-r-0 dark:border-outline-variant/26 dark:bg-surface-container-low/82 lg:p-1.5">
                                 <ScheduleDropCell
                                   cellId={getScheduleDropCellId(day.key, time)}
                                   dayLabel={day.label}
@@ -1409,9 +1425,9 @@ export default function Dashboard() {
                                     <button
                                       type="button"
                                       onClick={() => openCreateScheduleModal(day.key, time)}
-                                      className="flex min-h-[62px] w-full items-center justify-center rounded-[14px] border border-dashed border-outline/18 bg-transparent px-3 text-on-surface-variant/45 transition-all hover:border-outline/28 hover:bg-surface-container-low/40 hover:text-primary/75"
+                                      className="flex min-h-[62px] w-full items-center justify-center rounded-[14px] border border-dashed border-outline/32 bg-surface-container-lowest/70 px-3 text-on-surface-variant/72 transition-all hover:border-primary/30 hover:bg-surface-container hover:text-primary"
                                     >
-                                      <div className="flex items-center gap-2 opacity-70 transition-opacity group-hover:opacity-100">
+                                      <div className="flex items-center gap-2 opacity-90 transition-opacity group-hover:opacity-100">
                                         <Plus className="h-4 w-4" />
                                         <span className="text-[10px] font-semibold uppercase tracking-[0.16em]">Add</span>
                                       </div>
@@ -1650,7 +1666,7 @@ export default function Dashboard() {
                     onChange={(event) => handleScheduleFieldChange("startTime", event.target.value)}
                     className="w-full rounded-2xl border border-outline-variant/40 bg-surface-container-low px-4 py-3 text-on-surface outline-none focus:border-primary"
                   >
-                    {scheduleTimeOptions.map((time) => (
+                    {scheduleStartTimeOptions.map((time) => (
                       <option key={`start-${time}`} value={time}>
                         {formatScheduleTimeLabel(time)}
                       </option>
@@ -1666,7 +1682,7 @@ export default function Dashboard() {
                     onChange={(event) => handleScheduleFieldChange("endTime", event.target.value)}
                     className="w-full rounded-2xl border border-outline-variant/40 bg-surface-container-low px-4 py-3 text-on-surface outline-none focus:border-primary"
                   >
-                    {scheduleTimeOptions.map((time) => (
+                    {scheduleEndTimeOptions.map((time) => (
                       <option key={`end-${time}`} value={time}>
                         {formatScheduleTimeLabel(time)}
                       </option>
@@ -1682,7 +1698,7 @@ export default function Dashboard() {
               ) : null}
 
               {scheduleFormHasConflict ? (
-                <div className="rounded-2xl border border-amber-400/25 bg-amber-500/10 px-4 py-3 text-sm text-amber-800 dark:text-amber-200">
+                <div className="rounded-2xl border border-warning/35 bg-warning-container/88 px-4 py-3 text-sm text-on-warning-container">
                   This class overlaps another class. You can still save it, and the planner will keep the conflict highlighted.
                 </div>
               ) : null}
@@ -1700,14 +1716,14 @@ export default function Dashboard() {
                       to={activeScheduleRoute.to}
                       className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-bold transition-colors md:gap-2 md:rounded-xl md:px-3.5 md:py-2.5 md:text-sm ${activeScheduleAppearance.badgeClassName}`}
                     >
-                      <Navigation className="h-3.5 w-3.5 md:h-4 md:w-4" /> {activeScheduleRoute.label}
+                      <Navigation className="h-3.5 w-3.5 md:h-4 md:w-4" /> {'Direction'} {/*activeScheduleRoute.label*/}
                     </Link>
                     {editingScheduleEntryId ? (
                       <button
                         type="button"
                         onClick={() => { void handleScheduleDelete(); }}
                         disabled={isSavingSchedule || isDeletingSchedule}
-                        className="inline-flex items-center gap-1.5 rounded-lg bg-error/10 px-3 py-2 text-xs font-bold text-error transition-colors hover:bg-error/15 disabled:opacity-50 md:gap-2 md:rounded-xl md:px-3.5 md:py-2.5 md:text-sm"
+                        className="inline-flex items-center gap-1.5 rounded-lg bg-red-600 px-3 py-2 text-xs font-bold text-white shadow-[0_10px_22px_rgba(220,38,38,0.22)] transition-colors hover:bg-red-700 disabled:opacity-50 md:gap-2 md:rounded-xl md:px-3.5 md:py-2.5 md:text-sm"
                       >
                         <Trash2 className="h-3.5 w-3.5 md:h-4 md:w-4" /> Delete
                       </button>
@@ -1729,7 +1745,7 @@ export default function Dashboard() {
                     disabled={isSavingSchedule || isDeletingSchedule || Boolean(scheduleFormTimeError)}
                     className="inline-flex items-center justify-center gap-1.5 rounded-lg bg-primary px-3.5 py-2 text-xs font-bold text-on-primary transition-colors hover:brightness-110 disabled:opacity-50 md:gap-2 md:rounded-xl md:px-4 md:py-2.5 md:text-sm"
                   >
-                    <CalendarDays className="h-3.5 w-3.5 md:h-4 md:w-4" /> {isSavingSchedule ? "Saving..." : editingScheduleEntryId ? "Save change" : "Add Class"}
+                    <CalendarDays className="h-3.5 w-3.5 md:h-4 md:w-4" /> {isSavingSchedule ? "Saving..." : editingScheduleEntryId ? "Save" : "Add Class"}
                   </button>
                 </div>
               </div>

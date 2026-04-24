@@ -256,120 +256,126 @@ export default function ShuttlePage() {
         </div>
       ) : overview ? (
         <>
-          <section className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4 mb-8">
-            <div className="glass-panel rounded-3xl p-6">
-              <div className="w-11 h-11 rounded-2xl bg-primary/10 flex items-center justify-center text-primary mb-4">
-                <Bus className="w-5 h-5" />
-              </div>
-              <p className="font-headline text-3xl font-bold text-on-surface">{overview.activeVehicleCount}</p>
-              <p className="text-sm text-on-surface-variant mt-2">Active buses currently reporting on campus.</p>
+<section className="grid grid-cols-2 md:grid-cols-2 xl:grid-cols-4 gap-2 md:gap-4 mb-8">
+          <div className="glass-panel rounded-2xl md:rounded-3xl p-3 md:p-6">
+            <div className="w-9 h-9 md:w-11 md:h-11 rounded-xl md:rounded-2xl bg-primary/10 flex items-center justify-center text-primary mb-3 md:mb-4">
+              <Bus className="w-4 h-4 md:w-5 md:h-5" />
             </div>
+            <p className="text-[10px] md:text-xs font-bold text-primary uppercase tracking-wider mb-0.5 md:mb-1">Active Buses</p>
+            <p className="font-headline text-xl md:text-3xl font-bold text-on-surface">{overview.activeVehicleCount}</p>
+            <p className="text-xs md:text-sm text-on-surface-variant mt-1 md:mt-2 hidden md:block">Active buses currently reporting on campus.</p>
+          </div>
 
-            <div className="glass-panel rounded-3xl p-6">
-              <div className="w-11 h-11 rounded-2xl bg-secondary/10 flex items-center justify-center text-secondary mb-4">
-                <RouteIcon className="w-5 h-5" />
-              </div>
-              <p className="font-headline text-3xl font-bold text-on-surface">{overview.routeCount}</p>
-              <p className="text-sm text-on-surface-variant mt-2">Bull Runner routes currently published by Passio.</p>
+          <div className="glass-panel rounded-2xl md:rounded-3xl p-3 md:p-6">
+            <div className="w-9 h-9 md:w-11 md:h-11 rounded-xl md:rounded-2xl bg-secondary/10 flex items-center justify-center text-secondary mb-3 md:mb-4">
+              <RouteIcon className="w-4 h-4 md:w-5 md:h-5" />
             </div>
+            <p className="text-[10px] md:text-xs font-bold text-secondary uppercase tracking-wider mb-0.5 md:mb-1">Total Routes</p>
+            <p className="font-headline text-xl md:text-3xl font-bold text-on-surface">{overview.routeCount}</p>
+            <p className="text-xs md:text-sm text-on-surface-variant mt-1 md:mt-2 hidden md:block">Bull Runner routes currently published by Passio.</p>
+          </div>
 
-            <div className="glass-panel rounded-3xl p-6">
-              <div className="w-11 h-11 rounded-2xl bg-tertiary/10 flex items-center justify-center text-tertiary mb-4">
-                <AlertTriangle className="w-5 h-5" />
-              </div>
-              <p className="font-headline text-3xl font-bold text-on-surface">{serviceNotices.length}</p>
-              <p className="text-sm text-on-surface-variant mt-2">Transit alerts or service notices posted right now.</p>
+          <div className="glass-panel rounded-2xl md:rounded-3xl p-3 md:p-6">
+            <div className="w-9 h-9 md:w-11 md:h-11 rounded-xl md:rounded-2xl bg-tertiary/10 flex items-center justify-center text-tertiary mb-3 md:mb-4">
+              <AlertTriangle className="w-4 h-4 md:w-5 md:h-5" />
             </div>
+            <p className="text-[10px] md:text-xs font-bold text-tertiary uppercase tracking-wider mb-0.5 md:mb-1">Alerts</p>
+            <p className="font-headline text-xl md:text-3xl font-bold text-on-surface">{serviceNotices.length}</p>
+            <p className="text-xs md:text-sm text-on-surface-variant mt-1 md:mt-2 hidden md:block">Transit alerts or service notices posted right now.</p>
+          </div>
 
-            <div className="glass-panel rounded-3xl p-6">
-              <div className="w-11 h-11 rounded-2xl bg-primary/10 flex items-center justify-center text-primary mb-4">
-                <Clock3 className="w-5 h-5" />
+          <div className="glass-panel rounded-2xl md:rounded-3xl p-3 md:p-6">
+            <div className="w-9 h-9 md:w-11 md:h-11 rounded-xl md:rounded-2xl bg-primary/10 flex items-center justify-center text-primary mb-3 md:mb-4">
+              <Clock3 className="w-4 h-4 md:w-5 md:h-5" />
+            </div>
+            <p className="text-[10px] md:text-xs font-bold text-primary uppercase tracking-wider mb-0.5 md:mb-1">System Time</p>
+            <p className="font-headline text-xl md:text-2xl font-bold text-on-surface">{overview.reportedTime ?? "Live"}</p>
+            <p className="text-xs md:text-sm text-on-surface-variant mt-1 md:mt-2 hidden md:block">Passio-reported system time for this shuttle snapshot.</p>
+          </div>
+        </section>
+
+{selectedRoute ? (
+          <section className="mb-6 md:mb-8 rounded-2xl md:rounded-3xl p-4 md:p-6 text-white shadow-[0_16px_40px_rgba(0,0,0,0.12)]" style={{ background: `linear-gradient(135deg, ${selectedRouteColor}, color-mix(in srgb, ${selectedRouteColor} 68%, black 32%))` }}>
+            <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3 md:gap-4">
+              <div>
+                <span className="text-white/70 font-body text-[10px] tracking-[0.22em] uppercase font-bold mb-1 md:mb-2 block">Selected Route</span>
+                <h2 className="font-headline text-xl md:text-3xl font-bold tracking-tight">{selectedRoute.name}</h2>
+                <p className="text-xs md:text-sm text-white/80 mt-1 md:mt-2 max-w-2xl hidden sm:block">
+                  {selectedRoute.activeVehicleCount > 0
+                  ? `${selectedRoute.activeVehicleCount} live vehicle${selectedRoute.activeVehicleCount === 1 ? " is" : "s are"} currently on this route.`
+                  : "No buses are currently on this route, but its service status and alerts remain visible."}
+                </p>
               </div>
-              <p className="font-headline text-2xl font-bold text-on-surface">{overview.reportedTime ?? "Live"}</p>
-              <p className="text-sm text-on-surface-variant mt-2">Passio-reported system time for this shuttle snapshot.</p>
+
+              <button
+                onClick={() => setSelectedRouteId(null)}
+                className="self-start rounded-xl border border-white/20 bg-white/10 px-3 py-2 md:px-4 md:py-3 text-xs md:text-sm font-bold hover:bg-white/15 transition-colors"
+              >
+                Clear
+              </button>
             </div>
           </section>
+        ) : null}
 
-          {selectedRoute ? (
-            <section className="mb-8 rounded-3xl p-6 text-white shadow-[0_16px_40px_rgba(0,0,0,0.12)]" style={{ background: `linear-gradient(135deg, ${selectedRouteColor}, color-mix(in srgb, ${selectedRouteColor} 68%, black 32%))` }}>
-              <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
-                <div>
-                  <span className="text-white/70 font-body text-[10px] tracking-[0.22em] uppercase font-bold mb-2 block">Selected Route</span>
-                  <h2 className="font-headline text-3xl font-bold tracking-tight">{selectedRoute.name}</h2>
-                  <p className="text-sm text-white/80 mt-2 max-w-2xl">
-                    {selectedRoute.activeVehicleCount > 0
-                      ? `${selectedRoute.activeVehicleCount} live vehicle${selectedRoute.activeVehicleCount === 1 ? " is" : "s are"} currently reporting on this route.`
-                      : "No buses are currently reporting on this route, but its service status and alerts remain visible."}
-                  </p>
-                </div>
+<section className="glass-panel rounded-2xl md:rounded-3xl p-4 md:p-6 mb-8">
+          <div className="flex flex-col gap-3 md:gap-4 lg:flex-row lg:items-center lg:justify-between">
+            <div className="hidden md:block">
+              <span className="text-on-surface-variant font-body text-[10px] tracking-[0.22em] uppercase font-bold mb-2 block">Filter</span>
+              <h2 className="font-headline text-xl md:text-2xl font-bold text-primary">Route Filter</h2>
+              <p className="text-sm text-on-surface-variant mt-2">All routes visible even when inactive.</p>
+            </div>
+            <div className="md:hidden text-on-surface-variant font-body text-[10px] tracking-[0.22em] uppercase font-bold mb-1">Filter Routes</div>
 
+            <div className="flex flex-wrap gap-1.5 md:gap-2">
+              <button
+                onClick={() => setSelectedRouteId(null)}
+                className={cn(
+                  "rounded-full px-3 py-1.5 md:px-4 md:py-2 text-[10px] md:text-xs font-bold uppercase tracking-[0.15em] md:tracking-[0.18em] transition-colors border",
+                  !selectedRouteId
+                    ? "bg-primary text-on-primary border-primary"
+                    : "bg-surface-container-low text-on-surface-variant border-outline-variant/40 hover:bg-surface-container"
+                )}
+              >
+                All
+              </button>
+              {sortedRoutes.map((route) => (
                 <button
-                  onClick={() => setSelectedRouteId(null)}
-                  className="self-start rounded-xl border border-white/20 bg-white/10 px-4 py-3 text-sm font-bold hover:bg-white/15 transition-colors"
-                >
-                  Clear Filter
-                </button>
-              </div>
-            </section>
-          ) : null}
-
-          <section className="glass-panel rounded-3xl p-5 md:p-6 mb-8">
-            <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-              <div>
-                <span className="text-on-surface-variant font-body text-[10px] tracking-[0.22em] uppercase font-bold mb-2 block">Filter</span>
-                <h2 className="font-headline text-2xl font-bold text-primary">Route Filter</h2>
-                <p className="text-sm text-on-surface-variant mt-2">All Bull Runner routes stay visible here, even when no buses are currently active.</p>
-              </div>
-
-              <div className="flex flex-wrap gap-2">
-                <button
-                  onClick={() => setSelectedRouteId(null)}
+                  key={route.id}
+                  onClick={() => setSelectedRouteId(route.id)}
                   className={cn(
-                    "rounded-full px-4 py-2 text-xs font-bold uppercase tracking-[0.18em] transition-colors border",
-                    !selectedRouteId
-                      ? "bg-primary text-on-primary border-primary"
+                    "rounded-full px-3 py-1.5 md:px-4 md:py-2 text-[10px] md:text-xs font-bold uppercase tracking-[0.15em] md:tracking-[0.18em] transition-colors border",
+                    selectedRouteId === route.id
+                      ? "text-on-primary border-transparent"
                       : "bg-surface-container-low text-on-surface-variant border-outline-variant/40 hover:bg-surface-container"
                   )}
+                  style={selectedRouteId === route.id ? { backgroundColor: getPrimaryRouteColor(route) } : undefined}
                 >
-                  All Routes
+                  {route.shortName || route.name}
                 </button>
-                {sortedRoutes.map((route) => (
-                  <button
-                    key={route.id}
-                    onClick={() => setSelectedRouteId(route.id)}
-                    className={cn(
-                      "rounded-full px-4 py-2 text-xs font-bold uppercase tracking-[0.18em] transition-colors border",
-                      selectedRouteId === route.id
-                        ? "text-on-primary border-transparent"
-                        : "bg-surface-container-low text-on-surface-variant border-outline-variant/40 hover:bg-surface-container"
-                    )}
-                    style={selectedRouteId === route.id ? { backgroundColor: getPrimaryRouteColor(route) } : undefined}
-                  >
-                    {route.shortName || route.name}
-                  </button>
-                ))}
-              </div>
+              ))}
             </div>
-          </section>
+          </div>
+        </section>
 
           <section className="grid grid-cols-1 xl:grid-cols-12 gap-6 mb-8">
-            <div className="xl:col-span-8 glass-panel rounded-3xl overflow-hidden border flex flex-col" style={{ borderColor: selectedRoute ? `${selectedRouteColor}40` : undefined }}>
-              <div className="px-6 py-5 border-b border-outline-variant/20 flex items-center justify-between gap-4 flex-wrap">
-                <div>
-                  <span className="text-on-surface-variant font-body text-[10px] tracking-[0.22em] uppercase font-bold mb-2 block">Map</span>
-                  <h2 className="font-headline text-2xl font-bold text-primary">Live Bus Map</h2>
-                </div>
-                <div className="flex flex-wrap items-center gap-3 text-sm text-on-surface-variant">
-                  <span className="inline-flex items-center gap-2 rounded-full px-3 py-1.5" style={selectedRoute ? { backgroundColor: `${selectedRouteColor}18`, color: selectedRouteColor } : undefined}>
-                    <MapPinned className="w-4 h-4 text-primary" />
-                    {selectedRoute ? selectedRoute.name : "All routes"}
-                  </span>
-                  <span className="inline-flex items-center gap-2 rounded-full bg-surface-container px-3 py-1.5">
-                    <Bus className="w-4 h-4 text-primary" />
-                    {filteredVehicles.length} buses visible
-                  </span>
-                </div>
+<div className="xl:col-span-8 glass-panel rounded-2xl md:rounded-3xl overflow-hidden border flex flex-col" style={{ borderColor: selectedRoute ? `${selectedRouteColor}40` : undefined }}>
+            <div className="px-4 py-3 md:px-6 md:py-5 border-b border-outline-variant/20 flex items-center justify-between gap-3 md:gap-4 flex-wrap">
+              <div>
+                <span className="text-on-surface-variant font-body text-[10px] tracking-[0.22em] uppercase font-bold mb-1 md:mb-2 block">Map</span>
+                <h2 className="font-headline text-lg md:text-2xl font-bold text-primary">Live Bus Map</h2>
               </div>
+              <div className="flex flex-wrap items-center gap-2 md:gap-3 text-xs md:text-sm text-on-surface-variant">
+                <span className="inline-flex items-center gap-1.5 md:gap-2 rounded-full px-2.5 py-1 md:px-3 md:py-1.5" style={selectedRoute ? { backgroundColor: `${selectedRouteColor}18`, color: selectedRouteColor } : undefined}>
+                  <MapPinned className="w-3 h-3 md:w-4 md:h-4 text-primary" />
+                  <span className="hidden sm:inline">{selectedRoute ? selectedRoute.name : "All routes"}</span>
+                  <span className="sm:hidden">{selectedRoute ? selectedRoute.shortName || selectedRoute.name : "All"}</span>
+                </span>
+                <span className="inline-flex items-center gap-1.5 md:gap-2 rounded-full bg-surface-container px-2.5 py-1 md:px-3 md:py-1.5">
+                  <Bus className="w-3 h-3 md:w-4 md:h-4 text-primary" />
+                  {filteredVehicles.length}
+                </span>
+              </div>
+            </div>
 
               <div className="relative h-[420px] overflow-hidden bg-surface-container-lowest">
                 <MapContainer center={CAMPUS_CENTER} zoom={15} className="absolute inset-0 h-full w-full" zoomControl={false}>

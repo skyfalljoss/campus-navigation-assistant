@@ -1,5 +1,5 @@
 import { useAuth, useClerk } from "@clerk/clerk-react";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { Search, Navigation, X, Bookmark, BookmarkCheck, MapPin, Footprints, Coffee, Car, BookOpen, HelpCircle, LocateFixed, AlertCircle, ChevronRight, ArrowUp, CornerUpLeft, CornerUpRight, Flag, Check, Volume2, VolumeX } from "lucide-react";
 import { MapContainer, TileLayer, Marker, Polyline, useMap, useMapEvents } from "react-leaflet";
@@ -263,6 +263,8 @@ export default function MapPage() {
   const lastRerouteAtRef = useRef(0);
   const activeStepRef = useRef<HTMLDivElement | null>(null);
   const lastSpokenInstructionRef = useRef<string | null>(null);
+  const searchInputRef = useRef<HTMLInputElement | null>(null);
+  const searchInputId = useId();
 
   function updateMapChromeVisibility(nextVisible: boolean) {
     setIsMapChromeVisible(nextVisible);
@@ -664,6 +666,35 @@ export default function MapPage() {
     setIsGuideOpen(false);
   };
 
+  const focusSearchInput = (target: EventTarget | null) => {
+    const targetElement = target as HTMLElement | null;
+    if (targetElement?.closest("button")) {
+      return;
+    }
+
+    const input = searchInputRef.current;
+    if (!input) {
+      return;
+    }
+
+    input.focus();
+
+    const cursorPosition = input.value.length;
+    input.setSelectionRange(cursorPosition, cursorPosition);
+  };
+
+  const handleSearchShellPointerDown = (event: ReactPointerEvent<HTMLLabelElement>) => {
+    const target = event.target as HTMLElement | null;
+    if (target?.closest("button")) {
+      event.stopPropagation();
+      return;
+    }
+
+    event.preventDefault();
+    event.stopPropagation();
+    focusSearchInput(target);
+  };
+
   useEffect(() => {
     if (!pendingAutoNavigate || !selectedBuilding || isNavigating || isLocatingUser) {
       return;
@@ -693,14 +724,21 @@ export default function MapPage() {
       
       {/* Floating Search Bar & Filters */}
       <div className={cn(
-        "map-search-chrome absolute left-1/2 top-3 z-[520] flex w-full max-w-3xl -translate-x-1/2 flex-col gap-2.5 px-3 pointer-events-none transition-all duration-300 md:top-4 md:gap-3 md:px-4",
+        "map-search-chrome absolute inset-x-0 top-3 z-[520] mx-auto flex w-full max-w-3xl flex-col gap-2.5 px-3 pointer-events-none transition-all duration-300 md:top-4 md:gap-3 md:px-4",
         isNavigating ? "opacity-0 -translate-y-6 pointer-events-none" : "opacity-100 translate-y-0"
       )}>
-        <div className="relative shadow-[0_12px_30px_rgba(26,28,27,0.18)] dark:shadow-[0_14px_34px_rgba(9,10,10,0.34)] rounded-full bg-surface border border-outline-variant/20 pointer-events-auto">
-          <Search className="absolute left-5 top-1/2 -translate-y-1/2 w-5 h-5 text-on-surface-variant" />
+        <label
+          htmlFor={searchInputId}
+          data-testid="map-search-shell"
+          className="relative flex h-12 cursor-text items-center rounded-full border border-outline-variant/20 bg-surface shadow-[0_12px_30px_rgba(26,28,27,0.18)] pointer-events-auto md:h-14 dark:shadow-[0_14px_34px_rgba(9,10,10,0.34)]"
+          onPointerDown={handleSearchShellPointerDown}
+        >
+          <Search className="pointer-events-none ml-5 h-5 w-5 shrink-0 text-on-surface-variant" />
           <input
+            id={searchInputId}
+            ref={searchInputRef}
             type="text"
-            className="w-full bg-transparent text-on-surface rounded-full pl-14 pr-12 py-3.5 md:py-4 focus:outline-none font-body text-base placeholder:text-on-surface-variant"
+            className="h-full min-w-0 flex-1 rounded-full bg-transparent pl-4 pr-12 text-base leading-none text-on-surface placeholder:text-on-surface-variant focus:outline-none font-body"
             placeholder="Search buildings, rooms, services..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
@@ -713,7 +751,7 @@ export default function MapPage() {
               <X className="w-5 h-5 text-on-surface-variant" />
             </button>
           )}
-        </div>
+        </label>
 
         <div className="flex gap-1.5 overflow-x-auto pb-2 hide-scrollbar px-1 pointer-events-auto md:gap-2">
           <button 

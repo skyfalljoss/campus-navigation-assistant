@@ -35,4 +35,35 @@ test.describe("map", () => {
     await mapPage.search("xyznonexistent123");
     await expect(mapPage.noResultsMessage).toBeVisible();
   });
+
+  test("focuses the search field when clicking the visible search pill", async ({ page }) => {
+    await page.setViewportSize({ width: 1280, height: 720 });
+
+    const mapPage = new MapPage(page);
+    await mapPage.goto();
+    const searchShell = page.getByTestId("map-search-shell");
+
+    await expect(searchShell).toBeVisible();
+
+    const box = await searchShell.boundingBox();
+    if (!box) {
+      throw new Error("Search shell is not measurable.");
+    }
+
+    const clickPositions = [
+      { x: 20, y: 8 },
+      { x: Math.round(box.width / 2), y: Math.round(box.height / 2) },
+      { x: Math.max(20, Math.round(box.width - 20)), y: Math.max(8, Math.round(box.height - 8)) },
+    ];
+
+    for (const position of clickPositions) {
+      await page.evaluate(() => {
+        const activeElement = document.activeElement as HTMLElement | null;
+        activeElement?.blur();
+      });
+
+      await searchShell.click({ position });
+      await expect(mapPage.searchInput).toBeFocused();
+    }
+  });
 });
